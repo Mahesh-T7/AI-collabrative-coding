@@ -1,0 +1,388 @@
+import { useState, useRef, useEffect } from 'react';
+import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
+import { ScrollArea } from './ui/scroll-area';
+import { useAI } from '../hooks/useAI';
+import {
+    Sparkles,
+    Send,
+    Loader2,
+    Bug,
+    Lightbulb,
+    FileText,
+    X,
+    Check
+} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+interface Message {
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: Date;
+}
+
+interface AIAssistantProps {
+    currentCode?: string;
+    currentLanguage?: string;
+    selectedCode?: string;
+    files?: Array<{ name: string; content: string; language: string }>;
+    onClose?: () => void;
+    onApplyCode?: (code: string) => void;
+    initialMessage?: string;
+    onClearInitialMessage?: () => void;
+}
+
+export const AIAssistant = ({
+    currentCode = '',
+    currentLanguage = 'javascript',
+    selectedCode = '',
+    files = [],
+    onClose,
+    onApplyCode,
+    initialMessage,
+    publicMode = false
+}: AIAssistantProps) => {
+    // ... (rest of component state and hooks)
+
+    // Auto-send initial message if provided
+    useEffect(() => {
+        if (initialMessage) {
+            handleSendMessage(initialMessage);
+            if (onClearInitialMessage) {
+                onClearInitialMessage();
+            }
+        }
+    }, [initialMessage]);
+
+    // ... (rest of component state and hooks)
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState('');
+    const [activeAction, setActiveAction] = useState<string | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const {
+        loading,
+        chatWithAI,
+        explainCode,
+        detectBugs,
+        suggestRefactoring
+    } = useAI({ usePublic: publicMode });
+
+    useEffect(() => {
+        // Scroll to bottom when new messages arrive
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages]);
+
+    const addMessage = (role: 'user' | 'assistant', content: string) => {
+        setMessages(prev => [...prev, { role, content, timestamp: new Date() }]);
+    };
+
+    const handleSendMessage = async (text?: string) => {
+        const messageText = text || input.trim();
+        if (!messageText || loading) return;
+
+        if (!text) setInput(''); // Only clear input if using input state
+        addMessage('user', messageText);
+
+        try {
+            const conversationHistory = messages.map(m => ({
+                role: m.role,
+                content: m.content
+            }));
+
+            const response = await chatWithAI({
+                message: messageText,
+                codeContext: currentCode,
+                files,
+                conversationHistory
+            });
+
+            addMessage('assistant', response);
+        } catch (error) {
+            console.error('Chat error:', error);
+        }
+    };
+
+
+    const handleExplainCode = async () => {
+        const codeToExplain = selectedCode || currentCode;
+        if (!codeToExplain) return;
+
+        setActiveAction('explain');
+        addMessage('user', `Explain this ${currentLanguage} code`);
+
+        try {
+            const explanation = await explainCode({
+                code: codeToExplain,
+                language: currentLanguage,
+                files
+            });
+            addMessage('assistant', explanation);
+        } catch (error) {
+            console.error('Explain error:', error);
+        } finally {
+            setActiveAction(null);
+        }
+    };
+
+    const handleFindBugs = async () => {
+        const codeToCheck = selectedCode || currentCode;
+        if (!codeToCheck) return;
+
+        setActiveAction('bugs');
+        addMessage('user', `Find bugs in this ${currentLanguage} code`);
+
+        try {
+            const result = await detectBugs({
+                code: codeToCheck,
+                language: currentLanguage,
+                files
+            });
+
+            let response = '## Bug Analysis\n\n';
+
+            if (result.issues.length > 0) {
+                response += '### Issues Found:\n';
+                result.issues.forEach((issue: { line: number; severity: string; description: string }, idx: number) => {
+                    response += `${idx + 1}. **Line ${issue.line}** (${issue.severity}): ${issue.description}\n`;
+                });
+            } else {
+                response += 'No issues found! ✅\n';
+            }
+
+            if (result.fixes.length > 0) {
+                response += '\n### Suggested Fixes:\n';
+                result.fixes.forEach((fix: string, idx: number) => {
+                    response += `${idx + 1}. ${fix}\n`;
+                });
+            }
+
+            if (result.improvedCode) {
+                response += `\n### Improved Code:\n\`\`\`${currentLanguage}\n${result.improvedCode}\n\`\`\``;
+            }
+
+            addMessage('assistant', response);
+        } catch (error) {
+            console.error('Bug detection error:', error);
+        } finally {
+            setActiveAction(null);
+        }
+    };
+
+    const handleSuggestImprovements = async () => {
+        const codeToImprove = selectedCode || currentCode;
+        if (!codeToImprove) return;
+
+        setActiveAction('refactor');
+        addMessage('user', `Suggest improvements for this ${currentLanguage} code`);
+
+        try {
+            const result = await suggestRefactoring({
+                code: codeToImprove,
+                language: currentLanguage,
+                files
+            });
+
+            addMessage('assistant', result.suggestions);
+        } catch (error) {
+            console.error('Refactoring error:', error);
+        } finally {
+            setActiveAction(null);
+        }
+    };
+
+
+    return (
+        <div className="flex flex-col h-full bg-background/95 backdrop-blur-xl border-l border-border/50 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-border/50 bg-card/30">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 ring-1 ring-cyan-500/30">
+                        <Sparkles className="w-5 h-5 text-cyan-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                            AI Assistant
+                        </h2>
+                        <p className="text-xs text-muted-foreground">Powered by Gemini</p>
+                    </div>
+                </div>
+                {onClose && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onClose}
+                        className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                    </Button>
+                )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="p-4 border-b border-border/50 bg-card/10 backdrop-blur-sm">
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleExplainCode}
+                        disabled={loading || !currentCode}
+                        className="flex items-center gap-2 bg-background/50 border-cyan-500/20 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-300 whitespace-nowrap"
+                    >
+                        <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                        Explain
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleFindBugs}
+                        disabled={loading || !currentCode}
+                        className="flex items-center gap-2 bg-background/50 border-red-500/20 hover:border-red-500/50 hover:bg-red-500/10 transition-all duration-300 whitespace-nowrap"
+                    >
+                        <Bug className="w-3.5 h-3.5 text-red-400" />
+                        Find Bugs
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleSuggestImprovements}
+                        disabled={loading || !currentCode}
+                        className="flex items-center gap-2 bg-background/50 border-yellow-500/20 hover:border-yellow-500/50 hover:bg-yellow-500/10 transition-all duration-300 whitespace-nowrap"
+                    >
+                        <Lightbulb className="w-3.5 h-3.5 text-yellow-400" />
+                        Improve
+                    </Button>
+                </div>
+            </div>
+
+            {/* Messages */}
+            <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+                {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-6 animate-in fade-in duration-500">
+                        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center mb-6 ring-1 ring-cyan-500/20 shadow-[0_0_30px_-10px_rgba(6,182,212,0.3)]">
+                            <Sparkles className="w-10 h-10 text-cyan-400" />
+                        </div>
+                        <h3 className="text-xl font-semibold mb-2 text-foreground">How can I help?</h3>
+                        <p className="text-sm text-muted-foreground max-w-[250px] leading-relaxed">
+                            I can analyze your code, find bugs, or suggest optimizations. Just ask!
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        {messages.map((message, idx) => (
+                            <div
+                                key={idx}
+                                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300`}
+                            >
+                                <div
+                                    className={`max-w-[90%] rounded-2xl p-4 shadow-md ${message.role === 'user'
+                                        ? 'bg-gradient-to-br from-cyan-600 to-blue-600 text-white rounded-tr-none'
+                                        : 'bg-card border border-border/50 text-card-foreground rounded-tl-none backdrop-blur-sm'
+                                        }`}
+                                >
+                                    {message.role === 'assistant' ? (
+                                        <div className="prose prose-invert prose-sm max-w-none">
+                                            <ReactMarkdown
+                                                components={{
+                                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                    code({ node, inline, className, children, ...props }: any) {
+                                                        const match = /language-(\w+)/.exec(className || '');
+                                                        const codeContent = String(children).replace(/\n$/, '');
+                                                        return !inline && match ? (
+                                                            <div className="rounded-lg overflow-hidden my-3 border border-border/50 shadow-lg relative group">
+                                                                <div className="bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground border-b border-border/50 flex items-center justify-between">
+                                                                    <span>{match[1]}</span>
+                                                                    {onApplyCode && (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            className="h-6 gap-1 text-[10px] hover:text-cyan-400 hover:bg-cyan-400/10"
+                                                                            onClick={() => onApplyCode(codeContent)}
+                                                                        >
+                                                                            <Check className="w-3 h-3" />
+                                                                            Apply
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
+                                                                <SyntaxHighlighter
+                                                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                                    style={vscDarkPlus as any}
+                                                                    language={match[1]}
+                                                                    PreTag="div"
+                                                                    customStyle={{ margin: 0, borderRadius: 0 }}
+                                                                    {...props}
+                                                                >
+                                                                    {codeContent}
+                                                                </SyntaxHighlighter>
+                                                            </div>
+                                                        ) : (
+                                                            <code className="bg-muted/50 px-1.5 py-0.5 rounded text-cyan-300 font-mono text-xs" {...props}>
+                                                                {children}
+                                                            </code>
+                                                        );
+                                                    },
+                                                }}
+                                            >
+                                                {message.content}
+                                            </ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {loading && (
+                            <div className="flex justify-start animate-in fade-in duration-300">
+                                <div className="bg-card border border-border/50 rounded-2xl rounded-tl-none p-4 shadow-sm flex items-center gap-3">
+                                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                                    <span className="text-sm text-muted-foreground">Thinking...</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </ScrollArea>
+
+            {/* Input */}
+            <div className="p-4 border-t border-border/50 bg-card/30 backdrop-blur-md">
+                <div className="relative flex items-end gap-2 bg-background/50 rounded-xl border border-border/50 focus-within:border-cyan-500/50 focus-within:ring-1 focus-within:ring-cyan-500/20 transition-all duration-300 p-2">
+                    <Textarea
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSendMessage();
+                            }
+                        }}
+                        placeholder="Ask about your code..."
+                        className="min-h-[20px] max-h-[120px] resize-none bg-transparent border-none focus-visible:ring-0 p-2 text-sm placeholder:text-muted-foreground/50"
+                        disabled={loading}
+                    />
+                    <Button
+                        onClick={() => handleSendMessage()}
+                        disabled={loading || !input.trim()}
+                        size="icon"
+                        className={`h-8 w-8 mb-1 rounded-lg transition-all duration-300 ${input.trim()
+                            ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:opacity-90 shadow-lg shadow-cyan-500/20'
+                            : 'bg-muted text-muted-foreground'
+                            }`}
+                    >
+                        {loading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Send className="w-4 h-4" />
+                        )}
+                    </Button>
+                </div>
+                <div className="text-[10px] text-center mt-2 text-muted-foreground/40">
+                    AI can make mistakes. Review generated code.
+                </div>
+            </div>
+        </div>
+    );
+};
