@@ -32,6 +32,7 @@ interface AIAssistantProps {
     onApplyCode?: (code: string) => void;
     initialMessage?: string;
     onClearInitialMessage?: () => void;
+    publicMode?: boolean;
 }
 
 export const AIAssistant = ({
@@ -42,19 +43,10 @@ export const AIAssistant = ({
     onClose,
     onApplyCode,
     initialMessage,
+    onClearInitialMessage,
     publicMode = false
 }: AIAssistantProps) => {
     // ... (rest of component state and hooks)
-
-    // Auto-send initial message if provided
-    useEffect(() => {
-        if (initialMessage) {
-            handleSendMessage(initialMessage);
-            if (onClearInitialMessage) {
-                onClearInitialMessage();
-            }
-        }
-    }, [initialMessage]);
 
     // ... (rest of component state and hooks)
     const [messages, setMessages] = useState<Message[]>([]);
@@ -105,6 +97,16 @@ export const AIAssistant = ({
             console.error('Chat error:', error);
         }
     };
+
+    // Auto-send initial message if provided
+    useEffect(() => {
+        if (initialMessage) {
+            handleSendMessage(initialMessage);
+            if (onClearInitialMessage) {
+                onClearInitialMessage();
+            }
+        }
+    }, [initialMessage, handleSendMessage, onClearInitialMessage]);
 
 
     const handleExplainCode = async () => {

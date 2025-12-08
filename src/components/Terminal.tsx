@@ -133,7 +133,7 @@ export const Terminal = ({ projectId, codeOutput, problems = [], defaultTab = 't
                             });
                         }
                     } catch (e) {
-                        // ignore
+                        /* empty */
                     }
                 });
             }
@@ -202,7 +202,7 @@ export const Terminal = ({ projectId, codeOutput, problems = [], defaultTab = 't
                             cols: instance?.xterm.cols,
                             rows: instance?.xterm.rows,
                         });
-                    } catch (e) { }
+                    } catch (e) { /* empty */ }
                 }, 50);
             }
         });

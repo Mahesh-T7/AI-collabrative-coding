@@ -1,9 +1,9 @@
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import connectDB from './config/db.js';
+import mongoose from 'mongoose';
+import { env } from './config/validateEnv.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
@@ -13,12 +13,13 @@ import activityRoutes from './routes/activity.js';
 import publicRoutes from './routes/public.js';
 import executionRoutes from './routes/execution.js';
 import ChatService from './services/chatService.js';
-
-// Load env vars
-dotenv.config();
+import TerminalService from './services/terminalService.js';
+import CodeExecutionService from './services/codeExecutionService.js';
 
 // Connect to database
-connectDB();
+mongoose.connect(env.MONGODB_URI)
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error('MongoDB Connection Error:', err));
 
 const app = express();
 const httpServer = createServer(app);
@@ -27,7 +28,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
         origin: [
-            process.env.CLIENT_URL,
+            env.CLIENT_URL,
             "http://localhost:8080",
             "http://localhost:8081",
             "http://localhost:5173"
@@ -37,17 +38,10 @@ const io = new Server(httpServer, {
     }
 });
 
-// Initialize Chat Service
+// Initialize Services
 new ChatService(io);
-
-// Initialize Terminal Service
-import TerminalService from './services/terminalService.js';
 new TerminalService(io);
-
-// Initialize Code Execution Service
-import CodeExecutionService from './services/codeExecutionService.js';
 new CodeExecutionService(io);
-
 
 // Middleware
 app.use(cors());
@@ -61,7 +55,7 @@ app.use('/api/files', fileRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/public', publicRoutes);
-app.use('/api', executionRoutes); // Mounts execute at /api/execute
+app.use('/api', executionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -71,9 +65,9 @@ app.get('/api/health', (req, res) => {
 // Error handler
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
+const PORT = env.PORT;
 
 httpServer.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+    console.log(`Server running in ${env.NODE_ENV} mode on port ${PORT}`);
     console.log(`Socket.io server ready`);
 });
