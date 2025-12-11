@@ -8,6 +8,8 @@ const envSchema = z.object({
     MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
     JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
     OPENAI_API_KEY: z.string().optional(),
+    GEMINI_API_KEY: z.string().optional(),
+    CLIENT_URL: z.string().url().optional(),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 

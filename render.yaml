@@ -15,6 +15,10 @@ services:
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CLIENT_URL
+        value: https://ai-collaborative-coding-927n.vercel.app
 
   # Frontend Static Site
   - type: web
