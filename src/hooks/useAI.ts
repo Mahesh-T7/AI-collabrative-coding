@@ -55,16 +55,13 @@ export const useAI = (options?: { usePublic?: boolean }) => {
     // Strip trailing slash and /api suffix if present to ensure clean base URL
     const apiUrl = envApiUrl.replace(/\/$/, '').replace(/\/api$/, '');
 
-    // Optional client-side OpenAI key for dev-only direct calls (must start with VITE_)
+    // Optional client-side keys for dev-only direct calls
     const clientOpenAIKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
+    const clientGeminiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
     const clientModel = import.meta.env.VITE_AI_MODEL as string | undefined || 'gpt-4o-mini';
-
-    // ... existing directOpenAI ...
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 
     const directOpenAI = useCallback(async (endpoint: string, body: any) => {
-        // ... (keep exact same content for directOpenAI)
         if (!clientOpenAIKey) throw new Error('No client OpenAI key configured');
 
         const model = clientModel || 'gpt-4o-mini';
@@ -91,7 +88,7 @@ export const useAI = (options?: { usePublic?: boolean }) => {
             return data;
         };
 
-        // ... existing endpoint mappings ...
+        // ... Mappings ...
         if (endpoint === 'fix-error') {
             const code = body.code || '';
             const errorLog = body.errorLog || '';
@@ -201,8 +198,7 @@ export const useAI = (options?: { usePublic?: boolean }) => {
             const data = await fetchOpenAI(payload);
             const content = data.choices?.[0]?.message?.content || '';
             try {
-                const parsed = JSON.parse(content);
-                return parsed;
+                return JSON.parse(content);
             } catch (e) {
                 return { issues: [], fixes: [], improvedCode: content };
             }
@@ -236,8 +232,71 @@ export const useAI = (options?: { usePublic?: boolean }) => {
         throw new Error('Unsupported AI endpoint for direct OpenAI fallback');
     }, [clientOpenAIKey, clientModel]);
 
+    const directGemini = useCallback(async (endpoint: string, body: any) => {
+        if (!clientGeminiKey) throw new Error('No client Gemini key configured');
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${clientGeminiKey}`;
+
+        const fetchGemini = async (text: string) => {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text }] }]
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error?.message || 'Gemini request failed');
+            return data.candidates[0].content.parts[0].text;
+        };
+
+        if (endpoint === 'chat') {
+            const message = body.message || '';
+            // Simple one-shot chat for now
+            const responseText = await fetchGemini(message);
+            return { response: responseText };
+        }
+
+        if (endpoint === 'complete') {
+            const code = body.code || '';
+            const prompt = `Complete this code:\n${code}\nReturn only the completion.`;
+            const responseText = await fetchGemini(prompt);
+            return { completion: responseText.replace(/^```\w*\s*/, '').replace(/\s*```$/, '').trim() };
+        }
+
+        if (endpoint === 'explain') {
+            const code = body.code || '';
+            const prompt = `Explain this code:\n${code}`;
+            const responseText = await fetchGemini(prompt);
+            return { explanation: responseText };
+        }
+
+        // Fallbacks for other endpoints using simple prompting
+        const promptMap: Record<string, string> = {
+            'fix-error': `Fix this code error: ${body.errorLog}\nCode: ${body.code}`,
+            'bugs': `Find bugs in this code:\n${body.code}\nReturn JSON.`,
+            'refactor': `Refactor this code:\n${body.code}`,
+        };
+
+        if (promptMap[endpoint]) {
+            const responseText = await fetchGemini(promptMap[endpoint]);
+            // parsing JSON for bugs/fix-error would be needed here, simplifying for basic fallback
+            if (endpoint === 'bugs' || endpoint === 'fix-error') {
+                try {
+                    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                    return JSON.parse(jsonMatch ? jsonMatch[0] : responseText);
+                } catch {
+                    return { issue: 'Failed to parse', improvedCode: responseText };
+                }
+            }
+            return { suggestions: responseText };
+        }
+
+        return { response: "Endpoint not fully supported in direct Gemini fallback yet." };
+
+    }, [clientGeminiKey]);
+
     const makeRequest = useCallback(async (endpoint: string, body: unknown) => {
-        // Cancel previous request if still pending
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
@@ -252,13 +311,10 @@ export const useAI = (options?: { usePublic?: boolean }) => {
                 'Content-Type': 'application/json',
             };
 
-            // Send Authorization header in Bearer format if token exists
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            // Determine endpoint URL
-            // If usePublic is true, use the /api/public/ai path
             const base = options?.usePublic ? '/api/public' : '/api';
             const url = `${apiUrl}${base}/ai/${endpoint}`;
 
@@ -277,31 +333,28 @@ export const useAI = (options?: { usePublic?: boolean }) => {
                 }
                 return data;
             } else {
-                const text = await response.text();
-                if (!response.ok) {
-                    // Fallback for non-JSON errors (e.g. 404 HTML)
-                    throw new Error(`API Request Failed (${response.status}): ${text.slice(0, 100)}...`);
-                }
-                // Should typically be JSON, but if we got here with 200 OK and no JSON, it's weird.
-                console.warn('Received non-JSON response:', text.slice(0, 200));
-                throw new Error('Received unexpected non-JSON response from server');
+                // Fallback flow
+                throw new Error(`API Request Failed (${response.status})`);
             }
         } catch (err) {
             const error = err as Error;
-            // If request was aborted, don't proceed further
-            if (error.name === 'AbortError') {
-                return null; // Request was cancelled
-            }
+            if (error.name === 'AbortError') return null;
 
-            // If backend is unreachable or returns network errors, and a VITE_OPENAI_API_KEY is provided,
-            // attempt a direct client-side OpenAI call as a dev-only fallback.
+            // FALLBACK LOGIC
+            // 1. Try OpenAI Direct
             if (clientOpenAIKey) {
                 try {
-                    const direct = await directOpenAI(endpoint, body);
-                    return direct;
-                } catch (directErr) {
-                    // fall through to show original error below
-                    console.error('Direct OpenAI fallback error:', directErr);
+                    return await directOpenAI(endpoint, body);
+                } catch (openAiErr) {
+                    console.error('Direct OpenAI fallback error:', openAiErr);
+                }
+            }
+            // 2. Try Gemini Direct
+            if (clientGeminiKey) {
+                try {
+                    return await directGemini(endpoint, body);
+                } catch (geminiErr) {
+                    console.error('Direct Gemini fallback error', geminiErr);
                 }
             }
 
@@ -317,7 +370,7 @@ export const useAI = (options?: { usePublic?: boolean }) => {
             setLoading(false);
             abortControllerRef.current = null;
         }
-    }, [apiUrl, toast, clientOpenAIKey, directOpenAI, options?.usePublic]);
+    }, [apiUrl, toast, clientOpenAIKey, clientGeminiKey, directOpenAI, directGemini, options?.usePublic]);
 
     // ... (existing wrapper functions)
     const generateCompletion = useCallback(

@@ -1,20 +1,40 @@
 import pkg from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 const { OpenAI } = pkg;
 const openai = pkg.default || pkg;
 
 class AIService {
     constructor() {
         this._openai = null;
+        this._gemini = null;
         this.model = process.env.AI_MODEL || 'gpt-4o-mini';
+        this.geminiModelName = process.env.GEMINI_MODEL || 'gemini-flash-latest';
     }
 
     get openai() {
-        if (!this._openai) {
+        if (!this._openai && process.env.OPENAI_API_KEY) {
             this._openai = new (OpenAI || openai)({
                 apiKey: process.env.OPENAI_API_KEY,
             });
         }
         return this._openai;
+    }
+
+    get gemini() {
+        // Check for GEMINI_API_KEY or fallback to VITE_GEMINI_API_KEY from .env
+        const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+        if (!this._gemini && apiKey) {
+            const genAI = new GoogleGenerativeAI(apiKey);
+            this._gemini = genAI.getGenerativeModel({ model: this.geminiModelName });
+        }
+        return this._gemini;
+    }
+
+    get provider() {
+        if (this.openai && this.model.startsWith('gpt')) return 'openai';
+        if (this.gemini) return 'gemini';
+        if (this.openai) return 'openai'; // Fallback to OpenAI if available
+        throw new Error('No AI provider configured. Set OPENAI_API_KEY or VITE_GEMINI_API_KEY.');
     }
 
     /**
@@ -34,6 +54,14 @@ ${code}
 \`\`\`
 
 Provide a natural completion for the code at the cursor position. Return only the suggested code, nothing else.`;
+
+            if (this.provider === 'gemini') {
+                const result = await this.gemini.generateContent(prompt);
+                const response = await result.response;
+                const text = response.text();
+                // Clean up markdown code blocks if present
+                return text.replace(/^```\w*\s*/, '').replace(/\s*```$/, '').trim();
+            }
 
             const response = await this.openai.chat.completions.create({
                 model: this.model,
@@ -76,6 +104,14 @@ Provide a natural completion for the code at the cursor position. Return only th
             }
 
             const prompt = context;
+
+            if (this.provider === 'gemini') {
+                // Prepend system instruction to prompt for Gemini (since system roles aren't always standard in same way)
+                const geminiPrompt = `You are a helpful programming tutor. Explain code clearly and concisely. Use the provided project files for context if needed.\n\n${prompt}`;
+                const result = await this.gemini.generateContent(geminiPrompt);
+                const response = await result.response;
+                return response.text();
+            }
 
             const response = await this.openai.chat.completions.create({
                 model: this.model,
@@ -131,6 +167,18 @@ Format your response as JSON with this structure:
 
             const prompt = context;
 
+            if (this.provider === 'gemini') {
+                const geminiPrompt = `You are an expert code reviewer. Identify bugs and suggest fixes. Consider cross-file dependencies. Return only valid JSON.\n\n${prompt}`;
+                const result = await this.gemini.generateContent(geminiPrompt);
+                const response = await result.response;
+                const text = response.text();
+
+                // Try to extract JSON from markdown if present
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                const jsonStr = jsonMatch ? jsonMatch[0] : text;
+                return JSON.parse(jsonStr);
+            }
+
             const response = await this.openai.chat.completions.create({
                 model: this.model,
                 messages: [
@@ -151,7 +199,8 @@ Format your response as JSON with this structure:
             return JSON.parse(response.choices[0].message.content);
         } catch (error) {
             console.error('AI Bug Detection Error:', error);
-            throw new Error('Failed to detect bugs');
+            // Return empty structure on error to prevent crashing
+            return { issues: [], fixes: [], improvedCode: code };
         }
     }
 
@@ -179,6 +228,16 @@ Format your response as JSON with this structure:
             context += `\n\nTarget Code:\n\`\`\`${language}\n${code}\n\`\`\`\n\nProvide specific suggestions and improved code.`;
 
             const prompt = context;
+
+            if (this.provider === 'gemini') {
+                const geminiPrompt = `You are a senior software engineer specializing in code refactoring and optimization. Consider the entire project context.\n\n${prompt}`;
+                const result = await this.gemini.generateContent(geminiPrompt);
+                const response = await result.response;
+                return {
+                    suggestions: response.text(),
+                    timestamp: new Date().toISOString()
+                };
+            }
 
             const response = await this.openai.chat.completions.create({
                 model: this.model,
@@ -215,6 +274,39 @@ Format your response as JSON with this structure:
      */
     async chatWithAI(message, codeContext = '', conversationHistory = [], files = []) {
         try {
+            // Add current message with code context and files if available
+            let userMessage = message;
+
+            if (files.length > 0) {
+                userMessage += '\n\nProject Files:\n';
+                files.forEach(f => {
+                    userMessage += `File: ${f.name}\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n\n`;
+                });
+            }
+
+            if (codeContext) {
+                userMessage += `\n\nCurrent code context:\n\`\`\`\n${codeContext}\n\`\`\``;
+            }
+
+            if (this.provider === 'gemini') {
+                // Construct chat history for Gemini
+                const history = conversationHistory.map(msg => ({
+                    role: msg.role === 'user' ? 'user' : 'model', // Gemini uses 'model' instead of 'assistant'
+                    parts: [{ text: msg.content }]
+                }));
+
+                const chat = this.gemini.startChat({
+                    history: history,
+                    generationConfig: {
+                        maxOutputTokens: 1000,
+                    },
+                });
+
+                const result = await chat.sendMessage(userMessage);
+                const response = await result.response;
+                return response.text();
+            }
+
             const messages = [
                 {
                     role: 'system',
@@ -229,20 +321,6 @@ Format your response as JSON with this structure:
                     content: msg.content
                 });
             });
-
-            // Add current message with code context and files if available
-            let userMessage = message;
-
-            if (files.length > 0) {
-                userMessage += '\n\nProject Files:\n';
-                files.forEach(f => {
-                    userMessage += `File: ${f.name}\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n\n`;
-                });
-            }
-
-            if (codeContext) {
-                userMessage += `\n\nCurrent code context:\n\`\`\`\n${codeContext}\n\`\`\``;
-            }
 
             messages.push({
                 role: 'user',
@@ -274,6 +352,17 @@ Format your response as JSON with this structure:
         try {
             const prompt = `I have an error in my ${language} code.\n\nCode:\n\`\`\`${language}\n${code}\n\`\`\`\n\nError Log:\n\`\`\`\n${errorLog}\n\`\`\`\n\nPlease analyze the error and provide a fix. Return a JSON object with the following structure:\n{\n    "fixedCode": "The full corrected code content",\n    "explanation": "Brief explanation of the fix"\n}`;
 
+            if (this.provider === 'gemini') {
+                const geminiPrompt = `You are an expert debugger. Analyze the code and error log to provide a working fix. Return ONLY valid JSON.\n\n${prompt}`;
+                const result = await this.gemini.generateContent(geminiPrompt);
+                const response = await result.response;
+                const text = response.text();
+
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                const jsonStr = jsonMatch ? jsonMatch[0] : text;
+                return JSON.parse(jsonStr);
+            }
+
             const response = await this.openai.chat.completions.create({
                 model: this.model,
                 messages: [
@@ -281,7 +370,7 @@ Format your response as JSON with this structure:
                     { role: 'user', content: prompt }
                 ],
                 response_format: { type: "json_object" },
-                temperature: 0.2, // Lower temp for more deterministic fixes
+                temperature: 0.2,
             });
 
             return JSON.parse(response.choices[0].message.content);
@@ -300,6 +389,15 @@ Format your response as JSON with this structure:
         try {
             const prompt = `User encountered this terminal error:\n${errorLog}\n\nSuggest a single shell command to fix it. Return ONLY the command string, no markdown, no backticks, no explanations. If it requires code changes or complex manual intervention, return 'CODE_FIX_REQUIRED'.`;
 
+            if (this.provider === 'gemini') {
+                const geminiPrompt = `You are a CLI expert. Provide a single command to fix the error. Return ONLY the command string.\n\n${prompt}`;
+                const result = await this.gemini.generateContent(geminiPrompt);
+                const response = await result.response;
+                const text = response.text();
+                const cleanCommand = text.replace(/^```\w*\s*/, '').replace(/\s*```$/, '').trim();
+                return { command: cleanCommand };
+            }
+
             const response = await this.openai.chat.completions.create({
                 model: this.model,
                 messages: [
@@ -310,7 +408,6 @@ Format your response as JSON with this structure:
             });
 
             const command = response.choices[0].message.content.trim();
-            // Cleanup any markdown code blocks if AI ignores instruction
             const cleanCommand = command.replace(/^```\w*\s*/, '').replace(/\s*```$/, '').trim();
 
             return { command: cleanCommand };
