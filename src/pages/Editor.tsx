@@ -263,11 +263,28 @@ const Editor = () => {
     };
   }, []);
 
+  // Debounce ref for broadcast
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (currentFile) {
       const newContent = value || '';
-      setCurrentFile({ ...currentFile, content: newContent });
-      broadcastFileChange(currentFile._id, newContent);
+      const updatedFile = { ...currentFile, content: newContent };
+      setCurrentFile(updatedFile);
+
+      // Update the file in the files array to keep state in sync
+      setFiles(prevFiles =>
+        prevFiles.map(f => f._id === currentFile._id ? updatedFile : f)
+      );
+
+      // Debounce the broadcast
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        broadcastFileChange(currentFile._id, newContent);
+      }, 500);
     }
   }, [currentFile, broadcastFileChange]);
 
@@ -387,6 +404,19 @@ const Editor = () => {
     }
   };
 
+  // Handle Ctrl+S for saving
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveFile();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saveFile]);
+
   // Execute JavaScript/TypeScript code directly in browser with console capture
   const executeJavaScript = (code: string) => {
     try {
@@ -500,10 +530,25 @@ const Editor = () => {
     }
   };
 
-  const handleRequestFix = (log: string) => {
+
+  const { fixTerminalError } = useAI();
+
+  const handleRequestFix = async (log: string) => {
+    // Try terminal fix first
+    try {
+      const result = await fixTerminalError(log);
+      if (result.command && result.command !== 'CODE_FIX_REQUIRED') {
+        return result.command;
+      }
+    } catch (e) {
+      console.error("AI Terminal Fix failed, falling back to panel", e);
+    }
+
+    // Fallback to side panel
     const prompt = `I have an error in my code. Please fix it.\n\nError Log:\n${log}`;
     setAiInitialMessage(prompt);
     setShowAIPanel(true);
+    return;
   };
 
 
@@ -617,6 +662,7 @@ const Editor = () => {
                 {activeActivityView === 'explorer' && (
                   <>
                     <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} className="hidden" accept="*/*" />
+                    {/* @ts-expect-error - webkitdirectory is not a standard HTML attribute but supported in modern browsers */}
                     <input ref={folderInputRef} type="file" webkitdirectory="" directory="" onChange={handleFolderUpload} className="hidden" />
 
                     <FileExplorer
@@ -710,21 +756,36 @@ const Editor = () => {
                           variant="ghost"
                           size="icon"
                           onClick={() => {
-                            const hasPackageJson = files.some(f => f.name === 'package.json');
-                            if (hasPackageJson && socketRef.current) {
+                            const hasRootPackage = files.some(f => f.name === 'package.json');
+                            const hasBackendPackage = files.some(f => f.name === 'backend/package.json');
+                            const hasFrontendPackage = files.some(f => f.name === 'frontend/package.json');
+
+                            if ((hasRootPackage || hasBackendPackage || hasFrontendPackage) && socketRef.current) {
                               setShowTerminal(true);
                               setActiveTerminalTab('terminal');
-                              // Send Ctrl+C to stop any running process then npm start
+                              // Send Ctrl+C to stop any running process
                               socketRef.current.emit('terminal:input', { projectId: id, data: '\x03' });
+
                               setTimeout(() => {
-                                socketRef.current?.emit('terminal:input', { projectId: id, data: 'npm start\r' });
+                                let command = 'npm start\r'; // Default
+
+                                if (hasBackendPackage && hasFrontendPackage) {
+                                  // Run both using concurrently
+                                  command = 'npx -y concurrently "npm start --prefix backend" "npm run dev --prefix frontend"\r';
+                                } else if (hasBackendPackage) {
+                                  command = 'npm start --prefix backend\r';
+                                } else if (hasFrontendPackage) {
+                                  command = 'npm run dev --prefix frontend\r';
+                                }
+
+                                socketRef.current?.emit('terminal:input', { projectId: id, data: command });
+                                toast({ title: 'Starting Project', description: `Running: ${command.trim()}` });
                               }, 500);
-                              toast({ title: 'Starting Project', description: 'Running npm start...' });
                             } else {
                               toast({ title: 'No Project Found', description: 'No package.json found. Cannot run project.', variant: 'destructive' });
                             }
                           }}
-                          title="Run Project (npm start)"
+                          title="Run Project"
                           className="h-8 w-8 text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
                         >
                           <Play className="h-4 w-4 fill-current" />
@@ -817,6 +878,7 @@ const Editor = () => {
                   onApplyCode={handleApplyCode}
                   initialMessage={aiInitialMessage}
                   onClearInitialMessage={() => setAiInitialMessage('')}
+                  projectId={id}
                 />
               </Panel>
             </>

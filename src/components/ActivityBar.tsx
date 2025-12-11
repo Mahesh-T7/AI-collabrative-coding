@@ -2,6 +2,7 @@ import { FileCode2, Search, GitBranch, Play, Puzzle, Settings, MessageSquare, Te
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/components/ThemeProvider';
+import { SettingsModal } from './SettingsModal';
 
 export type ActivityView = 'explorer' | 'search' | 'git' | 'debug' | 'extensions' | 'chat' | 'terminal' | 'collaborators' | 'activity';
 
@@ -79,6 +80,22 @@ export const ActivityBar = ({ activeView, onViewChange }: ActivityBarProps) => {
 
                 {bottomItems.map((item) => {
                     const Icon = item.icon;
+                    if (item.id === 'settings') {
+                        return (
+                            <div key={item.id} className="flex justify-center">
+                                <SettingsModal>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="w-8 h-8 text-[hsl(var(--activity-bar-fg))] hover:text-[hsl(var(--activity-bar-active-fg))]"
+                                        title={item.label}
+                                    >
+                                        <Icon strokeWidth={1.5} className="w-5 h-5" />
+                                    </Button>
+                                </SettingsModal>
+                            </div>
+                        );
+                    }
                     return (
                         <div key={item.id} className="flex justify-center">
                             <Button

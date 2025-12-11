@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react"
 
-type Theme = "dark" | "light" | "system"
+export type Theme = "dark" | "light" | "system" | "midnight" | "forest" | "sunset"
 
 type ThemeProviderProps = {
     children: React.ReactNode
@@ -33,7 +33,7 @@ export function ThemeProvider({
     useEffect(() => {
         const root = window.document.documentElement
 
-        root.classList.remove("light", "dark")
+        root.classList.remove("light", "dark", "midnight", "forest", "sunset")
 
         if (theme === "system") {
             const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
@@ -57,7 +57,7 @@ export function ThemeProvider({
     }
 
     return (
-        <ThemeProviderContext.Provider value={value} {...props}>
+        <ThemeProviderContext.Provider value={value}>
             {children}
         </ThemeProviderContext.Provider>
     )
@@ -71,5 +71,3 @@ export const useTheme = () => {
 
     return context
 }
-
-const props = {} // Mock props to prevent error in simple copy paste if needed

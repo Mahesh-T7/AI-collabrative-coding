@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { WebLinksAddon } from 'xterm-addon-web-links';
 import { io, Socket } from 'socket.io-client';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -36,7 +37,7 @@ interface TerminalProps {
     problems?: Problem[];
     defaultTab?: TabType;
     onClose?: () => void;
-    onRequestFix?: (log: string) => void;
+    onRequestFix?: (log: string) => Promise<string | void> | void;
     simpleMode?: boolean;
 }
 
@@ -68,6 +69,7 @@ export const Terminal = ({ projectId, codeOutput, problems = [], defaultTab = 't
     }, [defaultTab]);
 
     const createTerminalInstance = useCallback((terminalId: string, profile: string = 'default') => {
+
         const term = new XTerm({
             cursorBlink: true,
             theme: {
@@ -79,10 +81,29 @@ export const Terminal = ({ projectId, codeOutput, problems = [], defaultTab = 't
             fontSize: 14,
             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
             scrollback: 5000,
+            allowProposedApi: true,
+            rightClickSelectsWord: true,
         });
 
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
+
+        // Add WebLinks Addon
+        term.loadAddon(new WebLinksAddon((event, uri) => {
+            window.open(uri, '_blank');
+        }));
+
+        // Handle selection to clipboard
+        term.onSelectionChange(() => {
+            const selection = term.getSelection();
+            if (selection) {
+                // Optional: navigator.clipboard.writeText(selection); 
+                // Browsers often block writeText without user interaction, 
+                // but normal selection + Ctrl+C usually works if xterm captures it right.
+                // We will rely on default browser copy behavior for selected text if possible,
+                // or ensure xterm doesn't swallow the key events.
+            }
+        });
 
         return { xterm: term, fitAddon, id: terminalId, container: null, profile };
     }, []);
@@ -249,7 +270,7 @@ export const Terminal = ({ projectId, codeOutput, problems = [], defaultTab = 't
         }
     };
 
-    const handleRequestFix = () => {
+    const handleRequestFix = async () => {
         if (!onRequestFix) return;
         let logContent = '';
         if (activeTab === 'output') {
@@ -274,7 +295,22 @@ export const Terminal = ({ projectId, codeOutput, problems = [], defaultTab = 't
                 logContent = 'No active terminal instance found.';
             }
         }
-        onRequestFix(logContent || codeOutput || "Please check the terminal.");
+
+        // Pass to onRequestFix. If it returns a string, it's a command to run.
+        try {
+            const command = await onRequestFix(logContent || codeOutput || "Please check the terminal.");
+            if (typeof command === 'string' && command.trim()) {
+                const instance = terminalInstances.current.get(activeTerminalId);
+                if (instance && socketRef.current) {
+                    // Visually verify to user it's an AI action
+                    instance.xterm.write(`\r\n\x1b[38;2;6;182;212m➤ AI Fix: ${command}\x1b[0m\r\n`);
+                    // Send to socket
+                    socketRef.current.emit('terminal:input', { projectId, terminalId: activeTerminalId, data: command + '\r' });
+                }
+            }
+        } catch (error) {
+            console.error("Failed to run AI Fix:", error);
+        }
     };
 
     const tabs: { id: TabType; label: string }[] = [

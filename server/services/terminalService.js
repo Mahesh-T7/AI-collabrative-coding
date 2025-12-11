@@ -19,6 +19,8 @@ class TerminalService {
     constructor(io) {
         this.io = io;
         this.sessions = new Map(); // "projectId:terminalId" -> process
+        this.terminalLogs = new Map(); // "projectId" -> string buffer
+        TerminalService.instance = this;
 
         this.io.on('connection', (socket) => {
             // Run File
@@ -95,6 +97,21 @@ class TerminalService {
         });
     }
 
+    static getInstance() {
+        return TerminalService.instance;
+    }
+
+    getLogs(projectId) {
+        return this.terminalLogs.get(projectId) || '';
+    }
+
+    _appendLog(projectId, data) {
+        const current = this.terminalLogs.get(projectId) || '';
+        const newData = data.toString();
+        // Keep last 10000 chars
+        this.terminalLogs.set(projectId, (current + newData).slice(-10000));
+    }
+
     createSession(projectId, terminalId, profile = 'default') {
         const isWin = os.platform() === 'win32';
         let shell = isWin ? 'powershell.exe' : 'bash';
@@ -130,11 +147,12 @@ class TerminalService {
         const projectDir = path.join(__dirname, '../../temp', projectId);
         let cwd = process.cwd();
         try {
-            if (fs.existsSync(projectDir)) {
-                cwd = projectDir;
+            if (!fs.existsSync(projectDir)) {
+                fs.mkdirSync(projectDir, { recursive: true });
             }
+            cwd = projectDir;
         } catch (e) {
-            console.error('Error checking project dir:', e);
+            console.error('Error ensuring project dir:', e);
         }
 
         // Final check if args empty for powershell default
@@ -155,6 +173,7 @@ class TerminalService {
             });
 
             termProcess.onData((data) => {
+                this._appendLog(projectId, data);
                 this.io.emit('terminal:output', { projectId, terminalId, data });
             });
 
@@ -171,10 +190,12 @@ class TerminalService {
             });
 
             termProcess.stdout.on('data', (data) => {
+                this._appendLog(projectId, data);
                 this.io.emit('terminal:output', { projectId, terminalId, data: data.toString() });
             });
 
             termProcess.stderr.on('data', (data) => {
+                this._appendLog(projectId, data);
                 this.io.emit('terminal:output', { projectId, terminalId, data: data.toString() });
             });
 
@@ -201,7 +222,9 @@ class TerminalService {
         const key = terminalId ? `${projectId}:${terminalId}` : projectId;
 
         const emitOutput = (data) => {
-            this.io.emit('terminal:output', { projectId, terminalId, data: data.toString() });
+            const str = data.toString();
+            this._appendLog(projectId, str);
+            this.io.emit('terminal:output', { projectId, terminalId, data: str });
         };
 
         let cmd, args;
@@ -241,14 +264,29 @@ class TerminalService {
                     cwd: projectDir,
                     env: process.env
                 });
-                termProcess.onData((data) => this.io.emit('terminal:output', { projectId, terminalId, data }));
+                termProcess.onData((data) => {
+                    this._appendLog(projectId, data);
+                    this.io.emit('terminal:output', { projectId, terminalId, data });
+                });
                 termProcess.onExit(() => {
                     this.sessions.delete(key);
                     emitOutput('\r\n\x1b[2mProgram exited.\x1b[0m\r\n');
                 });
                 this.sessions.set(key, termProcess);
             } else {
-                emitOutput("PTY not available. Falling back to non-interactive spawn.\r\n");
+                emitOutput("PTY not available. Running non-interactively...\r\n");
+                const proc = spawn(cmd, args, {
+                    cwd: projectDir,
+                    env: process.env,
+                    shell: true
+                });
+
+                proc.stdout.on('data', (data) => emitOutput(data));
+                proc.stderr.on('data', (data) => emitOutput(data));
+
+                proc.on('close', (code) => {
+                    emitOutput(`\r\n\x1b[2mProgram exited with code ${code}.\x1b[0m\r\n`);
+                });
             }
         } catch (e) {
             emitOutput(`\r\n\x1b[31mCompilation/Execution Error\x1b[0m\r\n`);

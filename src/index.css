@@ -177,6 +177,179 @@ All colors MUST be HSL.
     --cyan-accent: 211 100% 50%;
     --cyan-accent-glow: 211 100% 70%;
   }
+
+  /* Midnight Custom Theme */
+  .midnight {
+    --background: 222 47% 11%;
+    /* #0F172A */
+    --foreground: 214 32% 91%;
+    /* #F1F5F9 */
+    --card: 222 47% 11%;
+    --card-foreground: 214 32% 91%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 214 32% 91%;
+    --primary: 199 89% 48%;
+    /* Sky Blue */
+    --primary-foreground: 0 0% 100%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --border: 217 33% 20%;
+    --input: 217 33% 17%;
+    --ring: 199 89% 48%;
+
+    --activity-bar-bg: 220 25% 10%;
+    --activity-bar-fg: 215 20% 50%;
+    --activity-bar-active-fg: 199 89% 48%;
+    --activity-bar-inactive-fg: 215 20% 50%;
+    --activity-bar-hover: 217 33% 15%;
+    --activity-bar-active-border: 199 89% 48%;
+    --activity-bar-border: 217 33% 15%;
+
+    --sidebar-background: 222 47% 10%;
+    --sidebar-foreground: 214 32% 91%;
+    --sidebar-border: 217 33% 15%;
+    --sidebar-header-bg: 222 47% 11%;
+    --sidebar-header-fg: 215 20% 70%;
+
+    --editor-bg: 222 47% 11%;
+    --editor-sidebar: 222 47% 11%;
+    --editor-border: 217 33% 20%;
+    --editor-hover: 217 33% 17%;
+    --editor-text: 214 32% 91%;
+    --editor-text-muted: 215 20% 65%;
+    --editor-group-header-bg: 222 47% 11%;
+
+    --tab-active-bg: 222 47% 11%;
+    --tab-active-fg: 199 89% 48%;
+    --tab-inactive-bg: 222 40% 13%;
+    --tab-inactive-fg: 215 20% 65%;
+    --tab-border: 217 33% 15%;
+    --tab-hover-bg: 217 33% 15%;
+    --tab-active-border-top: 199 89% 48%;
+
+    --status-bar-bg: 199 89% 48%;
+    --status-bar-fg: 0 0% 100%;
+    --status-bar-border: 199 89% 48%;
+
+    --cyan-accent: 199 89% 48%;
+    --cyan-accent-glow: 199 89% 70%;
+  }
+
+  /* Forest Custom Theme */
+  .forest {
+    --background: 137 28% 12%;
+    /* #14271A */
+    --foreground: 142 70% 95%;
+    /* #E2FFE6 */
+    --card: 137 28% 12%;
+    --card-foreground: 142 70% 95%;
+    --popover: 137 28% 12%;
+    --popover-foreground: 142 70% 95%;
+    --primary: 142 71% 45%;
+    /* Forest Green */
+    --primary-foreground: 0 0% 100%;
+    --muted: 137 25% 18%;
+    --muted-foreground: 142 20% 70%;
+    --border: 137 25% 22%;
+    --input: 137 25% 18%;
+    --ring: 142 71% 45%;
+
+    --activity-bar-bg: 137 30% 10%;
+    --activity-bar-fg: 142 20% 60%;
+    --activity-bar-active-fg: 142 71% 45%;
+    --activity-bar-inactive-fg: 142 20% 60%;
+    --activity-bar-hover: 137 30% 15%;
+    --activity-bar-active-border: 142 71% 45%;
+    --activity-bar-border: 137 25% 18%;
+
+    --sidebar-background: 137 28% 12%;
+    --sidebar-foreground: 142 70% 95%;
+    --sidebar-border: 137 25% 18%;
+    --sidebar-header-bg: 137 28% 12%;
+    --sidebar-header-fg: 142 20% 70%;
+
+    --editor-bg: 137 28% 12%;
+    --editor-sidebar: 137 28% 12%;
+    --editor-border: 137 25% 22%;
+    --editor-hover: 137 25% 18%;
+    --editor-text: 142 70% 95%;
+    --editor-text-muted: 142 20% 70%;
+    --editor-group-header-bg: 137 28% 12%;
+
+    --tab-active-bg: 137 28% 12%;
+    --tab-active-fg: 142 71% 45%;
+    --tab-inactive-bg: 137 25% 15%;
+    --tab-inactive-fg: 142 20% 60%;
+    --tab-border: 137 25% 18%;
+    --tab-hover-bg: 137 30% 15%;
+    --tab-active-border-top: 142 71% 45%;
+
+    --status-bar-bg: 142 71% 45%;
+    --status-bar-fg: 0 0% 100%;
+    --status-bar-border: 142 71% 45%;
+
+    --cyan-accent: 142 71% 45%;
+    --cyan-accent-glow: 142 71% 65%;
+  }
+
+
+  /* Sunset Custom Theme */
+  .sunset {
+    --background: 12 25% 12%;
+    /* #261717 */
+    --foreground: 12 50% 95%;
+    /* #FFEFEF */
+    --card: 12 25% 12%;
+    --card-foreground: 12 50% 95%;
+    --popover: 12 25% 12%;
+    --popover-foreground: 12 50% 95%;
+    --primary: 25 95% 53%;
+    /* Orange */
+    --primary-foreground: 0 0% 100%;
+    --muted: 12 20% 18%;
+    --muted-foreground: 12 20% 70%;
+    --border: 12 20% 22%;
+    --input: 12 20% 18%;
+    --ring: 25 95% 53%;
+
+    --activity-bar-bg: 12 30% 10%;
+    /* Deep dark red/brown */
+    --activity-bar-fg: 12 20% 60%;
+    --activity-bar-active-fg: 25 95% 53%;
+    --activity-bar-inactive-fg: 12 20% 60%;
+    --activity-bar-hover: 12 30% 15%;
+    --activity-bar-active-border: 25 95% 53%;
+    --activity-bar-border: 12 20% 18%;
+
+    --sidebar-background: 12 25% 12%;
+    --sidebar-foreground: 12 50% 95%;
+    --sidebar-border: 12 20% 18%;
+    --sidebar-header-bg: 12 25% 12%;
+    --sidebar-header-fg: 12 20% 70%;
+
+    --editor-bg: 12 25% 12%;
+    --editor-sidebar: 12 25% 12%;
+    --editor-border: 12 20% 22%;
+    --editor-hover: 12 20% 18%;
+    --editor-text: 12 50% 95%;
+    --editor-text-muted: 12 20% 70%;
+    --editor-group-header-bg: 12 25% 12%;
+
+    --tab-active-bg: 12 25% 12%;
+    --tab-active-fg: 25 95% 53%;
+    --tab-inactive-bg: 12 20% 15%;
+    --tab-inactive-fg: 12 20% 60%;
+    --tab-border: 12 20% 18%;
+    --tab-hover-bg: 12 30% 15%;
+    --tab-active-border-top: 25 95% 53%;
+
+    --status-bar-bg: 25 95% 53%;
+    --status-bar-fg: 0 0% 100%;
+    --status-bar-border: 25 95% 53%;
+
+    --cyan-accent: 25 95% 53%;
+    --cyan-accent-glow: 25 95% 70%;
+  }
 }
 
 @layer base {

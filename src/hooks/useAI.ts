@@ -51,13 +51,18 @@ export const useAI = (options?: { usePublic?: boolean }) => {
     const { toast } = useToast();
     const abortControllerRef = useRef<AbortController | null>(null);
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    const envApiUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5001`;
+    // Strip trailing slash and /api suffix if present to ensure clean base URL
+    const apiUrl = envApiUrl.replace(/\/$/, '').replace(/\/api$/, '');
+
     // Optional client-side OpenAI key for dev-only direct calls (must start with VITE_)
     const clientOpenAIKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
     const clientModel = import.meta.env.VITE_AI_MODEL as string | undefined || 'gpt-4o-mini';
 
     // ... existing directOpenAI ...
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
+
     const directOpenAI = useCallback(async (endpoint: string, body: any) => {
         // ... (keep exact same content for directOpenAI)
         if (!clientOpenAIKey) throw new Error('No client OpenAI key configured');
@@ -262,17 +267,25 @@ export const useAI = (options?: { usePublic?: boolean }) => {
                 headers,
                 body: JSON.stringify(body),
                 signal: abortControllerRef.current.signal,
-                mode: 'cors',
             });
 
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'AI request failed');
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || `API Error: ${response.statusText}`);
+                }
+                return data;
+            } else {
+                const text = await response.text();
+                if (!response.ok) {
+                    // Fallback for non-JSON errors (e.g. 404 HTML)
+                    throw new Error(`API Request Failed (${response.status}): ${text.slice(0, 100)}...`);
+                }
+                // Should typically be JSON, but if we got here with 200 OK and no JSON, it's weird.
+                console.warn('Received non-JSON response:', text.slice(0, 200));
+                throw new Error('Received unexpected non-JSON response from server');
             }
-
-            return data;
         } catch (err) {
             const error = err as Error;
             // If request was aborted, don't proceed further
@@ -365,6 +378,16 @@ export const useAI = (options?: { usePublic?: boolean }) => {
         [makeRequest]
     );
 
+    const fixTerminalError = useCallback(
+        async (errorLog: string) => {
+            const data = await makeRequest('fix-terminal', { errorLog });
+            return {
+                command: data?.command || '',
+            };
+        },
+        [makeRequest]
+    );
+
     return {
         loading,
         error,
@@ -373,6 +396,11 @@ export const useAI = (options?: { usePublic?: boolean }) => {
         detectBugs,
         suggestRefactoring,
         chatWithAI,
-        fixError
+        fixError,
+        fixTerminalError,
+        runAgent: useCallback(async (prompt: string, projectId: string) => {
+            const data = await makeRequest('agent', { prompt, projectId });
+            return data;
+        }, [makeRequest])
     };
 };

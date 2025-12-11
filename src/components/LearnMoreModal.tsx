@@ -2,13 +2,14 @@ import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Github, Linkedin, Mail, Globe, Code2, Terminal, Users, Zap, Briefcase } from "lucide-react";
+// ... imports
+import { Github, Linkedin, Mail, Globe, Code2, Terminal, Users, Zap, Briefcase, Keyboard, HelpCircle } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface LearnMoreModalProps {
     children: React.ReactNode;
 }
 
-// Re-writing the component with correct Tabs structure
 const LearnMoreModal = ({ children }: LearnMoreModalProps) => {
     return (
         <Dialog>
@@ -43,6 +44,20 @@ const LearnMoreModal = ({ children }: LearnMoreModalProps) => {
                                 <Zap className="w-4 h-4" />
                                 User Guide
                             </TabsTrigger>
+                            <TabsTrigger
+                                value="shortcuts"
+                                className="w-full justify-start gap-3 px-4 py-3 data-[state=active]:bg-cyan-accent/10 data-[state=active]:text-cyan-accent border border-transparent data-[state=active]:border-cyan-accent/20"
+                            >
+                                <Keyboard className="w-4 h-4" />
+                                Shortcuts
+                            </TabsTrigger>
+                            <TabsTrigger
+                                value="faq"
+                                className="w-full justify-start gap-3 px-4 py-3 data-[state=active]:bg-cyan-accent/10 data-[state=active]:text-cyan-accent border border-transparent data-[state=active]:border-cyan-accent/20"
+                            >
+                                <HelpCircle className="w-4 h-4" />
+                                FAQ
+                            </TabsTrigger>
                         </TabsList>
 
                         <div className="mt-auto pt-8 text-xs text-[hsl(var(--editor-text-muted))]">
@@ -56,9 +71,14 @@ const LearnMoreModal = ({ children }: LearnMoreModalProps) => {
 
                         {/* Developer Tab */}
                         <TabsContent value="developer" className="h-full m-0">
+                            {/* ... existing developer content ... */}
+                            {/* Re-using existing content logic for brevity in this replace block if possible, but replace_file_content needs full block if I touch the container */}
+                            {/* Since I cannot select non-contiguous blocks, and I want to insert new tabs, I should just rebuild the structure or use multi_replace, but multi_replace is safer.
+                                Wait, I can't use multi_replace for inserting into the middle easily without context.
+                                I will just rewrite the file content efficiently.
+                             */}
                             <div className="h-full overflow-y-auto px-8 py-8 custom-scrollbar">
                                 <div className="max-w-3xl mx-auto space-y-8 pb-10">
-                                    {/* Header */}
                                     <div className="flex flex-col md:flex-row gap-6 items-center md:items-start text-center md:text-left">
                                         <div className="relative">
                                             <Avatar className="w-32 h-32 border-4 border-cyan-accent/20">
@@ -98,7 +118,6 @@ const LearnMoreModal = ({ children }: LearnMoreModalProps) => {
 
                                     <div className="h-px bg-[hsl(var(--editor-border))]" />
 
-                                    {/* Education */}
                                     <div className="space-y-4">
                                         <h3 className="text-lg font-semibold flex items-center gap-2 text-[hsl(var(--editor-text))]">
                                             <Briefcase className="w-5 h-5 text-cyan-accent" />
@@ -125,7 +144,6 @@ const LearnMoreModal = ({ children }: LearnMoreModalProps) => {
                                         </div>
                                     </div>
 
-                                    {/* Skills */}
                                     <div className="space-y-4">
                                         <h3 className="text-lg font-semibold flex items-center gap-2 text-[hsl(var(--editor-text))]">
                                             <Code2 className="w-5 h-5 text-cyan-accent" />
@@ -223,6 +241,75 @@ const LearnMoreModal = ({ children }: LearnMoreModalProps) => {
                                             Go to Dashboard
                                         </Button>
                                     </div>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        {/* Shortcuts Tab */}
+                        <TabsContent value="shortcuts" className="h-full m-0">
+                            <div className="h-full overflow-y-auto px-8 py-8 custom-scrollbar">
+                                <div className="max-w-3xl mx-auto space-y-8 pb-10">
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-bold text-[hsl(var(--editor-text))] mb-2">Keyboard Shortcuts</h2>
+                                        <p className="text-[hsl(var(--editor-text-muted))]">Boost your productivity with these hotkeys.</p>
+                                    </div>
+
+                                    <div className="grid gap-4">
+                                        {[
+                                            { action: "Save File", win: "Ctrl + S", mac: "Cmd + S" },
+                                            { action: "Toggle Terminal", win: "Ctrl + `", mac: "Cmd + `" },
+                                            { action: "Command Palette", win: "Ctrl + Shift + P", mac: "Cmd + Shift + P" },
+                                            { action: "AI Assistant", win: "Ctrl + I", mac: "Cmd + I" },
+                                            { action: "Format Code", win: "Shift + Alt + F", mac: "Shift + Opt + F" },
+                                            { action: "Find", win: "Ctrl + F", mac: "Cmd + F" },
+                                            { action: "Replace", win: "Ctrl + H", mac: "Cmd + H" }
+                                        ].map((item, i) => (
+                                            <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-card/20 border border-[hsl(var(--editor-border))]">
+                                                <span className="font-medium text-[hsl(var(--editor-text))]">{item.action}</span>
+                                                <div className="flex gap-4 text-sm text-[hsl(var(--editor-text-muted))]">
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className="text-xs uppercase opacity-50">Windows/Linux</span>
+                                                        <kbd className="px-2 py-1 bg-muted rounded border border-border font-mono text-xs">{item.win}</kbd>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-1">
+                                                        <span className="text-xs uppercase opacity-50">Mac</span>
+                                                        <kbd className="px-2 py-1 bg-muted rounded border border-border font-mono text-xs">{item.mac}</kbd>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        {/* FAQ Tab */}
+                        <TabsContent value="faq" className="h-full m-0">
+                            <div className="h-full overflow-y-auto px-8 py-8 custom-scrollbar">
+                                <div className="max-w-3xl mx-auto space-y-8 pb-10">
+                                    <div className="mb-8">
+                                        <h2 className="text-3xl font-bold text-[hsl(var(--editor-text))] mb-2">Frequently Asked Questions</h2>
+                                        <p className="text-[hsl(var(--editor-text-muted))]">Common questions and answers.</p>
+                                    </div>
+
+                                    <Accordion type="single" collapsible className="w-full">
+                                        {[
+                                            { q: "Is my code saved automatically?", a: "Yes, all changes are saved to the server in real-time as you type, ensuring you never lose your work." },
+                                            { q: "Which languages are supported?", a: "We support a wide range of languages including JavaScript, TypeScript, Python, Java, C++, Go, Rust, and more through our Monaco Editor integration." },
+                                            { q: "Can I deploy my project?", a: "Currently, you can run and test your code within the secure sandbox environment. Full deployment to external providers is on our roadmap." },
+                                            { q: "How does the AI work?", a: "We use Google's advanced Gemini Pro model to analyze your code context and provide intelligent suggestions, bug fixes, and explanations." },
+                                            { q: "Is it really real-time?", a: "Yes! We use WebSocket technology and CRDTs (Conflict-free Replicated Data Types) to ensure sub-millisecond synchronization between all collaborators." }
+                                        ].map((item, i) => (
+                                            <AccordionItem key={i} value={`item-${i}`} className="border-b border-[hsl(var(--editor-border))]">
+                                                <AccordionTrigger className="text-[hsl(var(--editor-text))] hover:text-cyan-accent text-left">
+                                                    {item.q}
+                                                </AccordionTrigger>
+                                                <AccordionContent className="text-[hsl(var(--editor-text-muted))] leading-relaxed">
+                                                    {item.a}
+                                                </AccordionContent>
+                                            </AccordionItem>
+                                        ))}
+                                    </Accordion>
                                 </div>
                             </div>
                         </TabsContent>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { ScrollArea } from './ui/scroll-area';
@@ -33,6 +33,7 @@ interface AIAssistantProps {
     initialMessage?: string;
     onClearInitialMessage?: () => void;
     publicMode?: boolean;
+    projectId?: string;
 }
 
 export const AIAssistant = ({
@@ -44,7 +45,8 @@ export const AIAssistant = ({
     onApplyCode,
     initialMessage,
     onClearInitialMessage,
-    publicMode = false
+    publicMode = false,
+    projectId
 }: AIAssistantProps) => {
     // ... (rest of component state and hooks)
 
@@ -58,7 +60,8 @@ export const AIAssistant = ({
         chatWithAI,
         explainCode,
         detectBugs,
-        suggestRefactoring
+        suggestRefactoring,
+        runAgent
     } = useAI({ usePublic: publicMode });
 
     useEffect(() => {
@@ -68,35 +71,53 @@ export const AIAssistant = ({
         }
     }, [messages]);
 
-    const addMessage = (role: 'user' | 'assistant', content: string) => {
+    const addMessage = useCallback((role: 'user' | 'assistant', content: string) => {
         setMessages(prev => [...prev, { role, content, timestamp: new Date() }]);
-    };
+    }, []);
 
-    const handleSendMessage = async (text?: string) => {
+    const handleSendMessage = useCallback(async (text?: string) => {
         const messageText = text || input.trim();
         if (!messageText || loading) return;
 
-        if (!text) setInput(''); // Only clear input if using input state
+        if (!text) setInput('');
         addMessage('user', messageText);
 
         try {
-            const conversationHistory = messages.map(m => ({
-                role: m.role,
-                content: m.content
-            }));
+            // Heuristic to decide if we should use the Agent or Chat
+            // Keywords: "create", "delete", "run", "execute", "install", "fix", "write"
+            // Or just ALWAYS use the Agent if projectId is present, as the Agent can handle chat too (if implemented well).
+            // But our AgentService is specialized for tools.
+            // Let's use a simple heuristic for now.
+            const isAgentRequest = projectId && /^(create|delete|run|execute|install|fix|write|modify|update|add)\s/i.test(messageText);
 
-            const response = await chatWithAI({
-                message: messageText,
-                codeContext: currentCode,
-                files,
-                conversationHistory
-            });
+            if (isAgentRequest && runAgent) {
+                const result = await runAgent(messageText, projectId);
+                if (result.actions && result.actions.length > 0) {
+                    const actionSummary = result.actions.map((a: any) => `* Executed \`${a.tool}\`: ${a.output}`).join('\n');
+                    addMessage('assistant', `${result.response}\n\n${actionSummary}`);
+                } else {
+                    addMessage('assistant', result.response);
+                }
+            } else {
+                const conversationHistory = messages.map(m => ({
+                    role: m.role,
+                    content: m.content
+                }));
 
-            addMessage('assistant', response);
+                const response = await chatWithAI({
+                    message: messageText,
+                    codeContext: currentCode,
+                    files,
+                    conversationHistory
+                });
+
+                addMessage('assistant', response);
+            }
         } catch (error) {
             console.error('Chat error:', error);
+            addMessage('assistant', 'Sorry, I encountered an error. Please try again.');
         }
-    };
+    }, [input, loading, messages, chatWithAI, runAgent, currentCode, files, addMessage, projectId]);
 
     // Auto-send initial message if provided
     useEffect(() => {

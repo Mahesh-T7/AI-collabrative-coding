@@ -265,53 +265,58 @@ Format your response as JSON with this structure:
 
     /**
      * Fix code based on error log
-     * @param {string} code - Current code
-     * @param {string} errorLog - Error output from terminal
-     * @param {string} language - Programming language
-     * @returns {Promise<string>} - Expected to return a JSON string with fixedCode and explanation
+     * @param {string} code - The code with the error
+     * @param {string} errorLog - The error message or log
+     * @param {string} language - The programming language of the code
+     * @returns {Promise<object>} - A JSON object containing the fixed code and an explanation
      */
-    async fixError(code, errorLog, language = 'javascript') {
+    async fixError(code, errorLog, language) {
         try {
-            const prompt = `I have an error in my ${language} code.
-            
-Code:
-\`\`\`${language}
-${code}
-\`\`\`
-
-Error Log:
-\`\`\`
-${errorLog}
-\`\`\`
-
-Please analyze the error and provide a fix. Return a JSON object with the following structure:
-{
-    "fixedCode": "The full corrected code content",
-    "explanation": "Brief explanation of the fix"
-}
-`;
+            const prompt = `I have an error in my ${language} code.\n\nCode:\n\`\`\`${language}\n${code}\n\`\`\`\n\nError Log:\n\`\`\`\n${errorLog}\n\`\`\`\n\nPlease analyze the error and provide a fix. Return a JSON object with the following structure:\n{\n    "fixedCode": "The full corrected code content",\n    "explanation": "Brief explanation of the fix"\n}`;
 
             const response = await this.openai.chat.completions.create({
                 model: this.model,
                 messages: [
-                    {
-                        role: 'system',
-                        content: 'You are an expert debugger. Analyze the code and error log to provide a working fix. Return ONLY JSON.'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
+                    { role: 'system', content: 'You are an expert debugger. Analyze the code and error log to provide a working fix. Return ONLY JSON.' },
+                    { role: 'user', content: prompt }
                 ],
-                max_tokens: 1500,
-                temperature: 0.2,
-                response_format: { type: 'json_object' }
+                response_format: { type: "json_object" },
+                temperature: 0.2, // Lower temp for more deterministic fixes
             });
 
             return JSON.parse(response.choices[0].message.content);
         } catch (error) {
-            console.error('AI Fix Error:', error);
-            throw new Error('Failed to fix error');
+            console.error('Error fixing code:', error);
+            throw new Error('Failed to fix code');
+        }
+    }
+
+    /**
+     * Suggests a shell command to fix a given terminal error.
+     * @param {string} errorLog - The terminal error log.
+     * @returns {Promise<object>} - An object containing the suggested command string.
+     */
+    async fixTerminalError(errorLog) {
+        try {
+            const prompt = `User encountered this terminal error:\n${errorLog}\n\nSuggest a single shell command to fix it. Return ONLY the command string, no markdown, no backticks, no explanations. If it requires code changes or complex manual intervention, return 'CODE_FIX_REQUIRED'.`;
+
+            const response = await this.openai.chat.completions.create({
+                model: this.model,
+                messages: [
+                    { role: 'system', content: 'You are a CLI expert associated with a Linux/Unix terminal environment (or PowerShell if likely Windows). Provide a single command to fix the error. Return ONLY the command string.' },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.1,
+            });
+
+            const command = response.choices[0].message.content.trim();
+            // Cleanup any markdown code blocks if AI ignores instruction
+            const cleanCommand = command.replace(/^```\w*\s*/, '').replace(/\s*```$/, '').trim();
+
+            return { command: cleanCommand };
+        } catch (error) {
+            console.error('Error fixing terminal error:', error);
+            throw new Error('Failed to fix terminal error');
         }
     }
 }

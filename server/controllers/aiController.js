@@ -130,9 +130,61 @@ export const fixError = async (req, res) => {
     }
 };
 
-// @desc    Chat with AI assistant
-// @route   POST /api/ai/chat
+// @desc    Fix terminal error
+// @route   POST /api/ai/fix-terminal
 // @access  Private
+export const fixTerminal = async (req, res) => {
+    try {
+        const { errorLog } = req.body;
+
+        if (!errorLog) {
+            return res.status(400).json({ message: 'Error log is required' });
+        }
+
+        const fix = await aiService.fixTerminalError(errorLog);
+
+        res.json({
+            ...fix,
+            success: true
+        });
+    } catch (error) {
+        console.error('Terminal fix error:', error);
+        res.status(500).json({
+            message: error.message || 'Failed to fix terminal error',
+            success: false
+        });
+    }
+};
+
+// @desc    Run Agentic AI
+// @route   POST /api/ai/agent
+// @access  Private
+export const runAgent = async (req, res) => {
+    try {
+        const { prompt, projectId } = req.body;
+
+        if (!prompt || !projectId) {
+            return res.status(400).json({ message: 'Prompt and Project ID are required' });
+        }
+
+        // Import dynamically to avoid circular issues if any, or just import at top if clean
+        const { default: agentService } = await import('../services/agentService.js');
+
+        const result = await agentService.runAgent(prompt, projectId);
+
+        res.json({
+            ...result,
+            success: true
+        });
+    } catch (error) {
+        console.error('Agent error:', error);
+        res.status(500).json({
+            message: error.message || 'Failed to run agent',
+            success: false
+        });
+    }
+};
+
 export const chatWithAI = async (req, res) => {
     try {
         const { message, codeContext, conversationHistory, files } = req.body;
