@@ -22,9 +22,63 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
 .env
+.env.local
+.env.*.local
 server/.env
+
+# Temporary directories
 temp/
 temp_execution/
 temp_test_java/
 *.timestamp-*.mjs
+
+# Documentation files (root level only - keep docs/ folder)
+/*_DOCUMENTATION.md
+/*_GUIDE.md
+/*_README.md
+/*_SUMMARY.md
+/*_PLAN.md
+/*_ERROR.md
+/*_FIX.md
+/*_REPORT.md
+/*_QUICKSTART.md
+/*_DOCS.md
+/*_IMPLEMENTATION.md
+/AGENT_*.md
+/AI_AGENT_*.md
+/AUTONOMOUS_*.md
+/CODE_*.md
+/IMPLEMENTATION_*.md
+/PROJECT_STRUCTURE.md
+/RESIZABLE_*.md
+/USER_MANUAL_*.md
+/VISUAL_GUIDE.md
+/CODE_EXECUTION_AND_COLLABORATION.md
+/VERIFICATION_REPORT.md
+
+# Lint outputs
+lint-output.txt
+lint-report.json
+
+# Test files
+test-agent.js
+test-all-features.js
+
+# NPM executables
+server/npm
+server/npm.cmd
+server/npm.ps1
+server/npx
+server/npx.cmd
+server/npx.ps1
+
+# Batch/PowerShell scripts
+*.bat
+*.ps1
+
+# Screenshot directories
+docs/screenshots/
+src/docs/

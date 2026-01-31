@@ -1,1 +1,13 @@
-{"name":"backend","dependencies":{"express":"^4","mongoose":"^7","cors":"^2"},"scripts":{"start":"node server.js"}}
+{
+  "name": "backend",
+  "dependencies": {
+    "express": "^4",
+    "mongoose": "^7",
+    "cors": "^2",
+    "nodemon": "^2"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  }
+}

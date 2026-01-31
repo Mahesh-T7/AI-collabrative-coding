@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useSocket } from './useSocket';
 import { useToast } from '@/hooks/use-toast';
 
 interface PeerConnection {
@@ -24,7 +24,7 @@ export const useWebRTC = (roomId: string, userId: string) => {
   const [participants, setParticipants] = useState<string[]>([]);
 
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const socket = useSocket();
   const { toast } = useToast();
 
   const removePeer = useCallback((peerId: string) => {
@@ -45,15 +45,15 @@ export const useWebRTC = (roomId: string, userId: string) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && channelRef.current) {
-        channelRef.current.send({
-          type: 'broadcast',
-          event: 'ice-candidate',
+      if (event.candidate && socket) {
+        socket.emit('webrtc-signal', {
+          type: 'ice-candidate',
           payload: {
             candidate: event.candidate,
             from: userId,
             to: peerId,
           },
+          roomId
         });
       }
     };
@@ -68,18 +68,16 @@ export const useWebRTC = (roomId: string, userId: string) => {
     };
 
     pc.onconnectionstatechange = () => {
-      console.log(`Connection state with ${peerId}:`, pc.connectionState);
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         removePeer(peerId);
       }
     };
 
     return pc;
-  }, [userId, removePeer]);
-
-
+  }, [userId, removePeer, socket, roomId]);
 
   const startCall = useCallback(async () => {
+    if (!socket) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -88,97 +86,7 @@ export const useWebRTC = (roomId: string, userId: string) => {
       setLocalStream(stream);
       setIsInCall(true);
 
-      // Set up signaling channel
-      const channel = supabase.channel(`video-call-${roomId}`, {
-        config: { presence: { key: userId } },
-      });
-
-      channel
-        .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState();
-          const peers = Object.keys(state).filter((id) => id !== userId);
-          setParticipants(peers);
-        })
-        .on('presence', { event: 'join' }, async ({ key }) => {
-          if (key !== userId) {
-            console.log('Peer joined:', key);
-            // Create offer for new peer
-            const pc = createPeerConnection(key);
-            peerConnections.current.set(key, pc);
-
-            stream.getTracks().forEach((track) => {
-              pc.addTrack(track, stream);
-            });
-
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-
-            channel.send({
-              type: 'broadcast',
-              event: 'offer',
-              payload: {
-                offer,
-                from: userId,
-                to: key,
-              },
-            });
-          }
-        })
-        .on('presence', { event: 'leave' }, ({ key }) => {
-          if (key !== userId) {
-            console.log('Peer left:', key);
-            removePeer(key);
-          }
-        })
-        .on('broadcast', { event: 'offer' }, async ({ payload }) => {
-          if (payload.to === userId) {
-            console.log('Received offer from', payload.from);
-            const pc = createPeerConnection(payload.from);
-            peerConnections.current.set(payload.from, pc);
-
-            stream.getTracks().forEach((track) => {
-              pc.addTrack(track, stream);
-            });
-
-            await pc.setRemoteDescription(payload.offer);
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-
-            channel.send({
-              type: 'broadcast',
-              event: 'answer',
-              payload: {
-                answer,
-                from: userId,
-                to: payload.from,
-              },
-            });
-          }
-        })
-        .on('broadcast', { event: 'answer' }, async ({ payload }) => {
-          if (payload.to === userId) {
-            console.log('Received answer from', payload.from);
-            const pc = peerConnections.current.get(payload.from);
-            if (pc) {
-              await pc.setRemoteDescription(payload.answer);
-            }
-          }
-        })
-        .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
-          if (payload.to === userId) {
-            const pc = peerConnections.current.get(payload.from);
-            if (pc && payload.candidate) {
-              await pc.addIceCandidate(payload.candidate);
-            }
-          }
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await channel.track({ online_at: new Date().toISOString() });
-          }
-        });
-
-      channelRef.current = channel;
+      socket.emit('join-video-room', { roomId, userId });
 
       toast({
         title: 'Call started',
@@ -192,23 +100,100 @@ export const useWebRTC = (roomId: string, userId: string) => {
         variant: 'destructive',
       });
     }
-  }, [roomId, userId, createPeerConnection, removePeer, toast]);
+  }, [roomId, userId, toast, socket]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('user-joined-video', async ({ userId: peerId }: { userId: string }) => {
+      if (peerId !== userId) {
+        console.log('Peer joined video:', peerId);
+        const pc = createPeerConnection(peerId);
+        peerConnections.current.set(peerId, pc);
+
+        if (localStream) {
+          localStream.getTracks().forEach((track) => {
+            pc.addTrack(track, localStream);
+          });
+        }
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket.emit('webrtc-signal', {
+          type: 'offer',
+          payload: {
+            offer,
+            from: userId,
+            to: peerId,
+          },
+          roomId
+        });
+      }
+    });
+
+    socket.on('user-left-video', ({ userId: peerId }: { userId: string }) => {
+      removePeer(peerId);
+    });
+
+    socket.on('webrtc-signal', async (data: any) => {
+      const { type, payload } = data;
+      if (payload.to !== userId) return;
+
+      if (type === 'offer') {
+        const pc = createPeerConnection(payload.from);
+        peerConnections.current.set(payload.from, pc);
+
+        if (localStream) {
+          localStream.getTracks().forEach((track) => {
+            pc.addTrack(track, localStream);
+          });
+        }
+
+        await pc.setRemoteDescription(payload.offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        socket.emit('webrtc-signal', {
+          type: 'answer',
+          payload: {
+            answer,
+            from: userId,
+            to: payload.from,
+          },
+          roomId
+        });
+      } else if (type === 'answer') {
+        const pc = peerConnections.current.get(payload.from);
+        if (pc) {
+          await pc.setRemoteDescription(payload.answer);
+        }
+      } else if (type === 'ice-candidate') {
+        const pc = peerConnections.current.get(payload.from);
+        if (pc && payload.candidate) {
+          await pc.addIceCandidate(payload.candidate);
+        }
+      }
+    });
+
+    return () => {
+      socket.off('user-joined-video');
+      socket.off('user-left-video');
+      socket.off('webrtc-signal');
+    };
+  }, [socket, userId, createPeerConnection, removePeer, localStream, roomId]);
 
   const endCall = useCallback(() => {
-    // Stop local stream
     if (localStream) {
       localStream.getTracks().forEach((track) => track.stop());
       setLocalStream(null);
     }
 
-    // Close all peer connections
     peerConnections.current.forEach((pc) => pc.close());
     peerConnections.current.clear();
 
-    // Unsubscribe from channel
-    if (channelRef.current) {
-      channelRef.current.unsubscribe();
-      channelRef.current = null;
+    if (socket) {
+      socket.emit('leave-video-room', { roomId, userId });
     }
 
     setRemoteStreams(new Map());
@@ -219,7 +204,7 @@ export const useWebRTC = (roomId: string, userId: string) => {
       title: 'Call ended',
       description: 'You have left the video call',
     });
-  }, [localStream, toast]);
+  }, [localStream, toast, socket, roomId, userId]);
 
   const toggleAudio = useCallback(() => {
     if (localStream) {
@@ -249,9 +234,6 @@ export const useWebRTC = (roomId: string, userId: string) => {
         localStream.getTracks().forEach((track) => track.stop());
       }
       connections.forEach((pc) => pc.close());
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-      }
     };
   }, [localStream]);
 
