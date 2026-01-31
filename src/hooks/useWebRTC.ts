@@ -136,6 +136,7 @@ export const useWebRTC = (roomId: string, userId: string) => {
       removePeer(peerId);
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     socket.on('webrtc-signal', async (data: any) => {
       const { type, payload } = data;
       if (payload.to !== userId) return;

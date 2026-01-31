@@ -31,10 +31,11 @@ class AIService {
     }
 
     get provider() {
-        if (this.openai && this.model.startsWith('gpt')) return 'openai';
+        // Prioritize Gemini if available (in case OpenAI key is expired)
         if (this.gemini) return 'gemini';
+        if (this.openai && this.model.startsWith('gpt')) return 'openai';
         if (this.openai) return 'openai'; // Fallback to OpenAI if available
-        throw new Error('No AI provider configured. Set OPENAI_API_KEY or VITE_GEMINI_API_KEY.');
+        throw new Error('No AI provider configured. Set GEMINI_API_KEY or VITE_GEMINI_API_KEY in your .env file.');
     }
 
     /**

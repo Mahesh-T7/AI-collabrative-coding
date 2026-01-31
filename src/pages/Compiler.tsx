@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MonacoEditor from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { AIAssistant } from '@/components/AIAssistant';
@@ -68,6 +69,11 @@ const Compiler = () => {
     const [output, setOutput] = useState('');
     const [showAIPanel, setShowAIPanel] = useState(false);
     const [aiInitialMessage, setAiInitialMessage] = useState('');
+    const [editorReady, setEditorReady] = useState(false);
+    const [stdin, setStdin] = useState('');
+
+    // Ref for Monaco Editor
+    const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
     const handleRunCode = async () => {
         setIsRunning(true);
@@ -79,7 +85,8 @@ const Compiler = () => {
 
             const response = await axios.post(url, {
                 language,
-                code
+                code,
+                stdin
             });
 
             const { output: result, error } = response.data;
@@ -104,11 +111,23 @@ const Compiler = () => {
         setLanguage(val);
         setCode(DEFAULT_CODE[val as keyof typeof DEFAULT_CODE] || '');
         setOutput('');
+        // Refocus editor after language change
+        setTimeout(() => {
+            editorRef.current?.focus();
+        }, 100);
     };
 
     const handleApplyCode = (newCode: string) => {
         setCode(newCode);
         toast({ title: 'Code Applied' });
+    };
+
+    // Handle Monaco Editor Mount
+    const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
+        editorRef.current = editor;
+        setEditorReady(true);
+        // Auto-focus the editor
+        editor.focus();
     };
 
     // AI Fix Request
@@ -201,12 +220,21 @@ const Compiler = () => {
                 {/* Split View */}
                 <div className="flex-1 flex overflow-hidden">
                     {/* Editor Pane */}
-                    <div className={cn("transition-all duration-300 border-r border-[#3e3e42]", showAIPanel ? "w-[40%]" : "w-[50%]")}>
+                    <div className={cn("transition-all duration-300 border-r border-[#3e3e42] relative", showAIPanel ? "w-[40%]" : "w-[50%]")}>
+                        {!editorReady && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-[#1e1e1e] z-10">
+                                <div className="flex flex-col items-center gap-3">
+                                    <Sparkles className="w-8 h-8 text-blue-400 animate-pulse" />
+                                    <span className="text-sm text-gray-400">Loading Editor...</span>
+                                </div>
+                            </div>
+                        )}
                         <MonacoEditor
                             height="100%"
                             language={language}
                             value={code}
                             onChange={(val) => setCode(val || '')}
+                            onMount={handleEditorDidMount}
                             theme="vs-dark"
                             options={{
                                 minimap: { enabled: false },
@@ -221,32 +249,48 @@ const Compiler = () => {
 
                     {/* Output Pane (Simple Text Display) */}
                     <div className={cn("flex-1 flex flex-col bg-[#1e1e1e]", showAIPanel ? "w-[30%]" : "w-[50%]")}>
-                        <div className="h-9 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-4">
-                            <span className="text-xs uppercase font-semibold text-gray-400 tracking-wider">Output</span>
-                            <div className="flex items-center gap-1">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 gap-1.5 text-xs text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
-                                    onClick={handleRequestFix}
-                                    disabled={!output}
-                                >
-                                    <Sparkles className="w-3 h-3" />
-                                    Fix Output
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 text-xs text-gray-500 hover:text-white gap-1.5"
-                                    onClick={() => setOutput('')}
-                                >
-                                    <RotateCcw className="w-3 h-3" />
-                                    Clear
-                                </Button>
+                        {/* Input Section */}
+                        <div className="border-b border-[#3e3e42]">
+                            <div className="h-9 bg-[#252526] flex items-center justify-between px-4">
+                                <span className="text-xs uppercase font-semibold text-gray-400 tracking-wider">Input (stdin)</span>
                             </div>
+                            <textarea
+                                value={stdin}
+                                onChange={(e) => setStdin(e.target.value)}
+                                placeholder="Enter input values (one per line)&#10;Example:&#10;5&#10;10"
+                                className="w-full h-24 px-4 py-2 bg-[#1e1e1e] text-gray-300 font-mono text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                            />
                         </div>
-                        <div className="flex-1 p-4 overflow-auto bg-[#1e1e1e] font-mono text-sm text-gray-300 whitespace-pre-wrap">
-                            {output || <span className="text-gray-600 italic">Click Run to see output...</span>}
+
+                        {/* Output Section */}
+                        <div className="flex-1 flex flex-col">
+                            <div className="h-9 bg-[#252526] border-b border-[#3e3e42] flex items-center justify-between px-4">
+                                <span className="text-xs uppercase font-semibold text-gray-400 tracking-wider">Output</span>
+                                <div className="flex items-center gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 gap-1.5 text-xs text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
+                                        onClick={handleRequestFix}
+                                        disabled={!output}
+                                    >
+                                        <Sparkles className="w-3 h-3" />
+                                        Fix Output
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-xs text-gray-500 hover:text-white gap-1.5"
+                                        onClick={() => setOutput('')}
+                                    >
+                                        <RotateCcw className="w-3 h-3" />
+                                        Clear
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="flex-1 p-4 overflow-auto bg-[#1e1e1e] font-mono text-sm text-gray-300 whitespace-pre-wrap">
+                                {output || <span className="text-gray-600 italic">Click Run to see output...</span>}
+                            </div>
                         </div>
                     </div>
 

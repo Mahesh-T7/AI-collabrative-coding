@@ -17,7 +17,7 @@ const EXECUTION_TIMEOUT = 5000; // 5 seconds
 const MAX_BUFFER = 1024 * 1024; // 1MB buffer
 
 // Helper to execute via Piston API (Cloud Fallback)
-const executeOnPiston = async (language, code) => {
+const executeOnPiston = async (language, code, stdin = '') => {
     try {
         const pistonLangs = {
             'python': { language: 'python', version: '3.10.0' },
@@ -35,14 +35,21 @@ const executeOnPiston = async (language, code) => {
         const config = pistonLangs[language];
         if (!config) throw new Error('Language not supported by Cloud Runner');
 
+        const requestBody = {
+            language: config.language,
+            version: config.version,
+            files: [{ content: code }]
+        };
+
+        // Add stdin if provided
+        if (stdin) {
+            requestBody.stdin = stdin;
+        }
+
         const response = await fetch('https://emkc.org/api/v2/piston/execute', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                language: config.language,
-                version: config.version,
-                files: [{ content: code }]
-            })
+            body: JSON.stringify(requestBody)
         });
 
         const data = await response.json();
@@ -60,7 +67,7 @@ const executeOnPiston = async (language, code) => {
 };
 
 export const executeCode = async (req, res) => {
-    const { language, code } = req.body;
+    const { language, code, stdin = '' } = req.body;
 
     if (!code) {
         return res.status(400).json({ error: 'No code provided' });
@@ -120,7 +127,7 @@ export const executeCode = async (req, res) => {
                     // Check for missing compiler
                     if (compileError.toString().includes('ENOENT') || compileError.toString().includes('not found') || compileError.toString().includes('is not recognized')) {
                         console.log(`Local compiler missing for ${language}, switching to Cloud Runner...`);
-                        const cloudResult = await executeOnPiston(language, code);
+                        const cloudResult = await executeOnPiston(language, code, stdin);
                         return res.json(cloudResult);
                     }
                     return res.json({ error: `Compilation Error:\n${compileError}` });
@@ -148,7 +155,7 @@ export const executeCode = async (req, res) => {
                     cleanup(tempFiles);
                     if (compileError.toString().includes('ENOENT') || compileError.toString().includes('not found') || compileError.toString().includes('is not recognized')) {
                         console.log(`Local compiler missing for ${language}, switching to Cloud Runner...`);
-                        const cloudResult = await executeOnPiston(language, code);
+                        const cloudResult = await executeOnPiston(language, code, stdin);
                         return res.json(cloudResult);
                     }
                     return res.json({ error: `Compilation Error:\n${compileError}` });
@@ -175,7 +182,7 @@ export const executeCode = async (req, res) => {
                     fs.rmSync(javaDir, { recursive: true, force: true });
                     if (compileError.toString().includes('ENOENT') || compileError.toString().includes('not found') || compileError.toString().includes('is not recognized')) {
                         console.log(`Local compiler missing for ${language}, switching to Cloud Runner...`);
-                        const cloudResult = await executeOnPiston(language, code);
+                        const cloudResult = await executeOnPiston(language, code, stdin);
                         return res.json(cloudResult);
                     }
                     return res.json({ error: `Compilation Error:\n${compileError}` });
@@ -185,7 +192,7 @@ export const executeCode = async (req, res) => {
             default:
                 // If not supported locally, try Cloud directly
                 console.log(`Language ${language} not supported locally, trying Cloud Runner...`);
-                const cloudResult = await executeOnPiston(language, code);
+                const cloudResult = await executeOnPiston(language, code, stdin);
                 return res.json(cloudResult);
             // return res.status(400).json({ error: 'Unsupported language' });
         }
@@ -212,7 +219,7 @@ export const executeCode = async (req, res) => {
                 // On Windows, 'python' might be an alias that prints "Python was not found" to stderr instead of ENOENT
                 if (error.code === 'ENOENT' || (stderr && stderr.includes('Python was not found'))) {
                     console.log(`Local runtime missing for ${language}, switching to Cloud Runner...`);
-                    const cloudResult = await executeOnPiston(language, code);
+                    const cloudResult = await executeOnPiston(language, code, stdin);
                     return res.json(cloudResult);
                 }
 

@@ -61,6 +61,7 @@ export const useAI = (options?: { usePublic?: boolean }) => {
     const clientModel = import.meta.env.VITE_AI_MODEL as string | undefined || 'gpt-4o-mini';
 
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const directOpenAI = useCallback(async (endpoint: string, body: any) => {
         if (!clientOpenAIKey) throw new Error('No client OpenAI key configured');
 
@@ -232,6 +233,7 @@ export const useAI = (options?: { usePublic?: boolean }) => {
         throw new Error('Unsupported AI endpoint for direct OpenAI fallback');
     }, [clientOpenAIKey, clientModel]);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const directGemini = useCallback(async (endpoint: string, body: any) => {
         if (!clientGeminiKey) throw new Error('No client Gemini key configured');
 
@@ -341,6 +343,19 @@ export const useAI = (options?: { usePublic?: boolean }) => {
             if (error.name === 'AbortError') return null;
 
             // FALLBACK LOGIC
+            // Note: Agent endpoint MUST run on backend (requires file system access, command execution)
+            // Skip fallback for agent endpoint
+            if (endpoint === 'agent') {
+                const errorMessage = error.message || 'Agent execution failed. Please ensure the backend server is running.';
+                setError(errorMessage);
+                toast({
+                    title: 'Agent Error',
+                    description: errorMessage,
+                    variant: 'destructive',
+                });
+                throw error;
+            }
+
             // 1. Try OpenAI Direct
             if (clientOpenAIKey) {
                 try {

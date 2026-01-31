@@ -167,10 +167,29 @@ export const runAgent = async (req, res) => {
             return res.status(400).json({ message: 'Prompt and Project ID are required' });
         }
 
-        // Import dynamically to avoid circular issues if any, or just import at top if clean
-        const { default: agentService } = await import('../services/agentService.js');
+        // Sync database files to disk before running agent
+        const File = (await import('../models/File.js')).default;
+        const path = (await import('path')).default;
+        const fs = (await import('fs-extra')).default;
 
-        const result = await agentService.runAgent(prompt, projectId);
+        const projectDir = path.resolve(process.cwd(), 'temp', projectId);
+        await fs.ensureDir(projectDir);
+
+        // Fetch all files for this project from database
+        const files = await File.find({ projectId });
+
+        // Write each file to disk
+        for (const file of files) {
+            const filePath = path.join(projectDir, file.name);
+            await fs.outputFile(filePath, file.content || '');
+        }
+
+        console.log(`✅ Synced ${files.length} files to ${projectDir}`);
+
+        // Use enhanced agent service with multi-step reasoning
+        const { default: enhancedAgentService } = await import('../services/enhancedAgentService.js');
+
+        const result = await enhancedAgentService.runAgent(prompt, projectId);
 
         res.json({
             ...result,

@@ -391,4 +391,47 @@ All colors MUST be HSL.
     border: 2px solid transparent;
     background-clip: content-box;
   }
+
+  /* Enhanced resize handle styles for better UX */
+  [data-panel-resize-handle-id] {
+    transition: background-color 150ms ease-in-out;
+    position: relative;
+  }
+
+  /* Horizontal resize handles (vertical dividers) */
+  [data-panel-resize-handle-id]:not([data-panel-group-direction="vertical"]) {
+    cursor: col-resize !important;
+  }
+
+  /* Vertical resize handles (horizontal dividers) */
+  [data-panel-resize-handle-id][data-panel-group-direction="vertical"] {
+    cursor: row-resize !important;
+  }
+
+  /* Hover state for resize handles */
+  [data-panel-resize-handle-id]:hover {
+    background-color: hsl(var(--primary)) !important;
+  }
+
+  /* Active/dragging state for resize handles */
+  [data-panel-resize-handle-id][data-resize-handle-state="drag"] {
+    background-color: hsl(var(--primary)) !important;
+  }
+
+  /* Increase hit area for resize handles without visual change */
+  [data-panel-resize-handle-id]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -2px;
+    right: -2px;
+  }
+
+  [data-panel-resize-handle-id][data-panel-group-direction="vertical"]::before {
+    left: 0;
+    right: 0;
+    top: -2px;
+    bottom: -2px;
+  }
 }

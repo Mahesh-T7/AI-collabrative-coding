@@ -11,7 +11,9 @@ import {
     Lightbulb,
     FileText,
     X,
-    Check
+    Check,
+    Bot,
+    Zap
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -48,12 +50,11 @@ export const AIAssistant = ({
     publicMode = false,
     projectId
 }: AIAssistantProps) => {
-    // ... (rest of component state and hooks)
-
-    // ... (rest of component state and hooks)
+    // Component state
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [activeAction, setActiveAction] = useState<string | null>(null);
+    const [agentMode, setAgentMode] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const {
         loading,
@@ -88,13 +89,30 @@ export const AIAssistant = ({
             // Or just ALWAYS use the Agent if projectId is present, as the Agent can handle chat too (if implemented well).
             // But our AgentService is specialized for tools.
             // Let's use a simple heuristic for now.
-            const isAgentRequest = projectId && /^(create|delete|run|execute|install|fix|write|modify|update|add)\s/i.test(messageText);
+            // Use agent mode if toggle is ON or if message contains agent keywords
+            const hasAgentKeywords = /^(create|delete|run|execute|install|fix|write|modify|update|add)\s/i.test(messageText);
+            const isAgentRequest = projectId && (agentMode || hasAgentKeywords);
 
             if (isAgentRequest && runAgent) {
                 const result = await runAgent(messageText, projectId);
                 if (result.actions && result.actions.length > 0) {
-                    const actionSummary = result.actions.map((a: any) => `* Executed \`${a.tool}\`: ${a.output}`).join('\n');
-                    addMessage('assistant', `${result.response}\n\n${actionSummary}`);
+                    // Format actions with better visual hierarchy
+                    const actionSummary = result.actions.map((a: { tool: string; output: string; args?: Record<string, unknown> }, idx: number) => {
+                        const toolEmoji = {
+                            write_file: '📝',
+                            read_file: '📖',
+                            update_file: '✏️',
+                            delete_file: '🗑️',
+                            list_dir: '📁',
+                            run_command: '⚡',
+                            analyze_error: '🔍',
+                            search_files: '🔎'
+                        }[a.tool] || '🔧';
+
+                        return `### ${toolEmoji} Action ${idx + 1}: \`${a.tool}\`\n\n${a.output}\n`;
+                    }).join('\n---\n\n');
+
+                    addMessage('assistant', `${result.response}\n\n## 🤖 Agent Actions Executed\n\n${actionSummary}`);
                 } else {
                     addMessage('assistant', result.response);
                 }
@@ -115,7 +133,12 @@ export const AIAssistant = ({
             }
         } catch (error) {
             console.error('Chat error:', error);
-            addMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('leaked') || errorMessage.includes('403')) {
+                addMessage('assistant', '⚠️ **API Key Issue** - Your Gemini API key has been disabled. Please get a new key from [Google AI Studio](https://aistudio.google.com/app/apikey) and update your `.env` files.');
+            } else {
+                addMessage('assistant', `⚠️ **Error**: Sorry, I encountered an error. ${errorMessage}`);
+            }
         }
     }, [input, loading, messages, chatWithAI, runAgent, currentCode, files, addMessage, projectId]);
 
@@ -146,6 +169,12 @@ export const AIAssistant = ({
             addMessage('assistant', explanation);
         } catch (error) {
             console.error('Explain error:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('leaked') || errorMessage.includes('403')) {
+                addMessage('assistant', '⚠️ **API Key Issue** - Your Gemini API key has been disabled. Please get a new key from [Google AI Studio](https://aistudio.google.com/app/apikey) and update your `.env` files.');
+            } else {
+                addMessage('assistant', `⚠️ **Error**: ${errorMessage}`);
+            }
         } finally {
             setActiveAction(null);
         }
@@ -190,6 +219,12 @@ export const AIAssistant = ({
             addMessage('assistant', response);
         } catch (error) {
             console.error('Bug detection error:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('leaked') || errorMessage.includes('403')) {
+                addMessage('assistant', '⚠️ **API Key Issue** - Your Gemini API key has been disabled. Please get a new key from [Google AI Studio](https://aistudio.google.com/app/apikey) and update your `.env` files.');
+            } else {
+                addMessage('assistant', `⚠️ **Error**: ${errorMessage}`);
+            }
         } finally {
             setActiveAction(null);
         }
@@ -212,6 +247,16 @@ export const AIAssistant = ({
             addMessage('assistant', result.suggestions);
         } catch (error) {
             console.error('Refactoring error:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            // Check for specific error types
+            if (errorMessage.includes('leaked') || errorMessage.includes('403')) {
+                addMessage('assistant', '⚠️ **API Key Issue**\n\nYour Gemini API key has been disabled. Please:\n\n1. Get a new API key from [Google AI Studio](https://aistudio.google.com/app/apikey)\n2. Update your `.env` files with the new key\n3. Restart the application\n\nSee the console for more details.');
+            } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('Network')) {
+                addMessage('assistant', '⚠️ **Network Error**\n\nCouldn\'t connect to the AI service. Please check:\n\n1. Your internet connection\n2. The backend server is running\n3. API keys are configured correctly');
+            } else {
+                addMessage('assistant', `⚠️ **Error**\n\nSorry, I encountered an error while analyzing your code:\n\n${errorMessage}\n\nPlease try again or check the console for details.`);
+            }
         } finally {
             setActiveAction(null);
         }
@@ -219,30 +264,59 @@ export const AIAssistant = ({
 
 
     return (
-        <div className="flex flex-col h-full bg-background/95 backdrop-blur-xl border-l border-border/50 shadow-2xl">
+        <div className="flex flex-col h-full w-full bg-background/95 backdrop-blur-xl border-l border-border/50 shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border/50 bg-card/30">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 ring-1 ring-cyan-500/30">
-                        <Sparkles className="w-5 h-5 text-cyan-400" />
+                    <div className={`p-2 rounded-lg ring-1 transition-all duration-300 ${agentMode
+                        ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 ring-purple-500/30 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]'
+                        : 'bg-gradient-to-br from-cyan-500/20 to-blue-500/20 ring-cyan-500/30'
+                        }`}>
+                        {agentMode ? (
+                            <Bot className="w-5 h-5 text-purple-400 animate-pulse" />
+                        ) : (
+                            <Sparkles className="w-5 h-5 text-cyan-400" />
+                        )}
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                            AI Assistant
+                        <h2 className={`text-lg font-bold bg-gradient-to-r bg-clip-text text-transparent ${agentMode
+                            ? 'from-purple-400 to-pink-400'
+                            : 'from-cyan-400 to-blue-400'
+                            }`}>
+                            {agentMode ? 'Autonomous Agent' : 'AI Assistant'}
                         </h2>
-                        <p className="text-xs text-muted-foreground">Powered by Gemini</p>
+                        <p className="text-xs text-muted-foreground">
+                            {agentMode ? 'Full execution mode' : 'Powered by Gemini'}
+                        </p>
                     </div>
                 </div>
-                {onClose && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onClose}
-                        className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-                    >
-                        <X className="w-4 h-4" />
-                    </Button>
-                )}
+                <div className="flex items-center gap-2">
+                    {projectId && (
+                        <Button
+                            variant={agentMode ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setAgentMode(!agentMode)}
+                            className={`flex items-center gap-2 transition-all duration-300 ${agentMode
+                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:opacity-90 shadow-lg shadow-purple-500/20'
+                                : 'border-purple-500/20 hover:border-purple-500/50 hover:bg-purple-500/10'
+                                }`}
+                            title="Toggle autonomous agent mode - can execute code, run commands, and modify files"
+                        >
+                            <Zap className={`w-3.5 h-3.5 ${agentMode ? 'text-white' : 'text-purple-400'}`} />
+                            <span className="text-xs font-medium">Agent Mode</span>
+                        </Button>
+                    )}
+                    {onClose && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={onClose}
+                            className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                        >
+                            <X className="w-4 h-4" />
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Action Buttons */}
@@ -307,7 +381,7 @@ export const AIAssistant = ({
                                         }`}
                                 >
                                     {message.role === 'assistant' ? (
-                                        <div className="prose prose-invert prose-sm max-w-none">
+                                        <div className="prose prose-invert prose-sm max-w-none overflow-y-auto max-h-[400px] custom-scrollbar">
                                             <ReactMarkdown
                                                 components={{
                                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any

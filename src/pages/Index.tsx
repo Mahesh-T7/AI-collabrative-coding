@@ -8,7 +8,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0d1117] via-[#161b22] to-[#0d1117]">
-      <header className="border-b border-[hsl(var(--editor-border))] bg-card/30 backdrop-blur-sm">
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-[hsl(var(--editor-border))] bg-card/95 backdrop-blur-md">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-accent to-cyan-accent-glow flex items-center justify-center">
@@ -35,7 +35,7 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-20">
+      <main className="container mx-auto px-4 py-20 pt-32">
         <div className="max-w-4xl mx-auto text-center mb-20">
           <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-cyan-accent via-cyan-accent-glow to-cyan-accent bg-clip-text text-transparent">
             Code Together, Build Faster

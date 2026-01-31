@@ -16,10 +16,17 @@ import ChatService from './services/chatService.js';
 import TerminalService from './services/terminalService.js';
 import CodeExecutionService from './services/codeExecutionService.js';
 
-// Connect to database
-mongoose.connect(env.MONGODB_URI)
-    .then(() => console.log('MongoDB Connected'))
-    .catch(err => console.error('MongoDB Connection Error:', err));
+// Connect to database with timeout settings
+mongoose.connect(env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    connectTimeoutMS: 10000,
+})
+    .then(() => console.log('✓ MongoDB Connected'))
+    .catch(err => {
+        console.error('✗ MongoDB Connection Error:', err.message);
+        console.error('  Please check your MongoDB URI and network connection');
+        console.error('  Server will continue running but database operations will fail');
+    });
 
 const app = express();
 const httpServer = createServer(app);

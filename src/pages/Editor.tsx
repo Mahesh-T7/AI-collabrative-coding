@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelGroupHandle } from "react-resizable-panels";
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
@@ -41,6 +41,7 @@ import { EditorTabs } from '@/components/EditorTabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { downloadFile, downloadZip } from '@/lib/fileUtils';
+import { usePanelPersistence, debounce } from '@/hooks/usePanelPersistence';
 
 interface File {
   _id: string;
@@ -112,11 +113,68 @@ const Editor = () => {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const socketRef = useRef<Socket | null>(null);
+
+  // Panel group refs for programmatic control (double-click reset)
+  const mainHorizontalPanelRef = useRef<ImperativePanelGroupHandle>(null);
+  const editorVerticalPanelRef = useRef<ImperativePanelGroupHandle>(null);
+
   const navigate = useNavigate();
 
   const { toast } = useToast();
   const { generateCompletion } = useAI();
   const completionProviderRef = useRef<IDisposable | null>(null);
+
+  // Panel persistence hooks for saving/loading layout sizes
+  const sidebarPersistence = usePanelPersistence('editor-sidebar-layout');
+  const terminalPersistence = usePanelPersistence('editor-terminal-layout');
+  const aiPanelPersistence = usePanelPersistence('editor-ai-panel-layout');
+
+  /**
+   * Reset sidebar panel to default size (20%)
+   * Triggered by double-clicking the sidebar resize handle
+   */
+  const resetSidebarSize = useCallback(() => {
+    if (mainHorizontalPanelRef.current && activeActivityView) {
+      const layout = showAIPanel ? [20, 55, 25] : [20, 80];
+      mainHorizontalPanelRef.current.setLayout(layout);
+      toast({
+        title: 'Panel Reset',
+        description: 'Sidebar restored to default size',
+        duration: 2000
+      });
+    }
+  }, [activeActivityView, showAIPanel, toast]);
+
+  /**
+   * Reset AI panel to default size (25%)
+   * Triggered by double-clicking the AI panel resize handle
+   */
+  const resetAIPanelSize = useCallback(() => {
+    if (mainHorizontalPanelRef.current && showAIPanel) {
+      const layout = activeActivityView ? [20, 55, 25] : [75, 25];
+      mainHorizontalPanelRef.current.setLayout(layout);
+      toast({
+        title: 'Panel Reset',
+        description: 'AI Assistant restored to default size',
+        duration: 2000
+      });
+    }
+  }, [activeActivityView, showAIPanel, toast]);
+
+  /**
+   * Reset terminal panel to default size (40%)
+   * Triggered by double-clicking the terminal resize handle
+   */
+  const resetTerminalSize = useCallback(() => {
+    if (editorVerticalPanelRef.current && showTerminal) {
+      editorVerticalPanelRef.current.setLayout([60, 40]);
+      toast({
+        title: 'Panel Reset',
+        description: 'Terminal restored to default size',
+        duration: 2000
+      });
+    }
+  }, [showTerminal, toast]);
 
   // Initialize Socket.IO connection
   useEffect(() => {
@@ -379,7 +437,7 @@ const Editor = () => {
     }
   };
 
-  const saveFile = async () => {
+  const saveFile = useCallback(async () => {
     if (!currentFile) return;
 
     setSaving(true);
@@ -402,7 +460,7 @@ const Editor = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }, [currentFile, toast]);
 
   // Handle Ctrl+S for saving
   useEffect(() => {
@@ -653,7 +711,12 @@ const Editor = () => {
         />
 
         {/* Sidebar / Main Content Split */}
-        <PanelGroup direction="horizontal">
+        <PanelGroup
+          ref={mainHorizontalPanelRef}
+          direction="horizontal"
+          id="main-horizontal-layout"
+          autoSaveId="main-horizontal-layout"
+        >
           {/* Sidebar (FileExplorer, Search, etc) - Conditionally shown */}
           {activeActivityView && (
             <>
@@ -702,7 +765,10 @@ const Editor = () => {
                   </div>
                 )}
               </Panel>
-              <PanelResizeHandle className="w-[1px] bg-[hsl(var(--border))] hover:bg-[hsl(var(--primary))] transition-colors" />
+              <PanelResizeHandle
+                className="w-[1px] bg-[hsl(var(--border))] hover:bg-[hsl(var(--primary))] transition-colors"
+                onDoubleClick={resetSidebarSize}
+              />
             </>
           )}
 
@@ -804,7 +870,12 @@ const Editor = () => {
                   />
 
                   {/* Monaco Editor */}
-                  <PanelGroup direction="vertical">
+                  <PanelGroup
+                    ref={editorVerticalPanelRef}
+                    direction="vertical"
+                    id="editor-vertical-layout"
+                    autoSaveId="editor-vertical-layout"
+                  >
                     <Panel defaultSize={showTerminal ? 60 : 100} minSize={30}>
                       <div className="h-full relative">
                         {/* Toolbar moved to EditorTabs */}
@@ -835,7 +906,10 @@ const Editor = () => {
                     {/* Bottom Panel (Terminal) */}
                     {showTerminal && (
                       <>
-                        <PanelResizeHandle className="h-[1px] bg-[hsl(var(--border))] hover:bg-[hsl(var(--primary))] transition-colors" />
+                        <PanelResizeHandle
+                          className="h-[1px] bg-[hsl(var(--border))] hover:bg-[hsl(var(--primary))] transition-colors"
+                          onDoubleClick={resetTerminalSize}
+                        />
                         <Panel defaultSize={40} minSize={5}>
                           <Terminal
                             projectId={id || ''}
@@ -867,7 +941,10 @@ const Editor = () => {
           {/* AI Assistant Panel (Right Side) */}
           {showAIPanel && (
             <>
-              <PanelResizeHandle className="w-[1px] bg-[hsl(var(--border))] hover:bg-[hsl(var(--primary))] transition-colors" />
+              <PanelResizeHandle
+                className="w-[1px] bg-[hsl(var(--border))] hover:bg-[hsl(var(--primary))] transition-colors"
+                onDoubleClick={resetAIPanelSize}
+              />
               <Panel defaultSize={25} minSize={20} maxSize={40} className="bg-[hsl(var(--sidebar-background))]">
                 <AIAssistant
                   currentCode={currentFile?.content || ''}
