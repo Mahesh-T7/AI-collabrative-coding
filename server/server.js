@@ -50,10 +50,26 @@ new ChatService(io);
 new TerminalService(io);
 new CodeExecutionService(io);
 
-// Middleware
-app.use(cors());
+// Middleware - CORS Configuration
+app.use(cors({
+    origin: [
+        env.CLIENT_URL,
+        "https://ai-collabrative-coding-git-main-mahesh-ts-projects.vercel.app",
+        "http://localhost:8080",
+        "http://localhost:8081",
+        "http://localhost:5173"
+    ].filter(Boolean),
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Root route - Test endpoint
+app.get("/", (req, res) => {
+    res.send("Backend is running 🚀");
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
